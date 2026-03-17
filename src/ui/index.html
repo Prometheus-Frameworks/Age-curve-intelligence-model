@@ -12,40 +12,44 @@
 
       <section>
         <h2>Run research</h2>
-        <form id="run-form">
+        <form id="run-form" class="row">
           <input id="input-file" type="file" accept=".csv,.json" required />
           <label><input id="run-validation" type="checkbox" /> Run validation after research</label>
           <button type="submit">Run pipeline</button>
         </form>
-        <pre id="run-status">No run yet.</pre>
+        <div id="run-status" class="status">No run yet.</div>
       </section>
 
       <section>
         <h2>Results overview</h2>
         <button id="refresh-summary">Refresh summary</button>
-        <pre id="summary">No summary loaded.</pre>
+        <div id="summary" class="content-box">No summary loaded.</div>
       </section>
 
       <section>
         <h2>Position browser</h2>
-        <select id="position-select">
-          <option>QB</option>
-          <option>RB</option>
-          <option>WR</option>
-          <option>TE</option>
-        </select>
-        <button id="load-position">Load position</button>
-        <pre id="position-results">No position loaded.</pre>
+        <div class="row">
+          <select id="position-select">
+            <option>QB</option>
+            <option>RB</option>
+            <option>WR</option>
+            <option>TE</option>
+          </select>
+          <button id="load-position">Load position</button>
+        </div>
+        <div id="position-results" class="content-box">No position loaded.</div>
       </section>
 
       <section>
         <h2>Player search</h2>
-        <form id="player-form">
-          <input id="player-id" placeholder="playerId" required />
+        <form id="player-form" class="row">
+          <input id="player-name" list="player-options" placeholder="Search player name" required />
+          <datalist id="player-options"></datalist>
+          <input id="player-id" placeholder="playerId" required readonly />
           <input id="player-season" placeholder="season (optional)" />
           <button type="submit">Lookup</button>
         </form>
-        <pre id="player-results">No player loaded.</pre>
+        <div id="player-results" class="content-box">No player loaded.</div>
       </section>
 
       <section>

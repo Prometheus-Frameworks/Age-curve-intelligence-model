@@ -93,7 +93,13 @@ export async function buildResultsSummary(artifactDir: string) {
           generatedAt: validation.generatedAt,
           passedCases: validation.passedCases,
           failedCases: validation.failedCases,
-          totalCases: validation.totalCases
+          totalCases: validation.totalCases,
+          failures: validation.results
+            .filter((result) => !result.pass)
+            .map((result) => ({
+              caseName: result.caseName,
+              mismatchExplanations: result.mismatchExplanations
+            }))
         }
       : null
   };
@@ -123,6 +129,33 @@ export async function buildPositionSummary(artifactDir: string, position: Positi
     bottomPlayers,
     modifierBucketCounts: modifierCounts
   };
+}
+
+
+export async function listLatestPlayers(artifactDir: string) {
+  const data = await readLatestArtifacts(artifactDir);
+  if (!data) {
+    return null;
+  }
+
+  const allRows = Object.values(data.trajectoryScores).flat();
+  const latestByPlayer = new Map<string, PositionAgeTrajectoryScore>();
+
+  for (const row of allRows) {
+    const existing = latestByPlayer.get(row.playerId);
+    if (!existing || row.season > existing.season) {
+      latestByPlayer.set(row.playerId, row);
+    }
+  }
+
+  return [...latestByPlayer.values()]
+    .map((row) => ({
+      playerId: row.playerId,
+      playerName: row.playerName,
+      season: row.season,
+      position: row.position
+    }))
+    .sort((a, b) => a.playerName.localeCompare(b.playerName));
 }
 
 function matchesPlayerQuery(row: PositionAgeTrajectoryScore, playerId: string, season?: number): boolean {

@@ -2,16 +2,15 @@
 
 This repo is a standalone model lab for age-based fantasy football research, now with a thin hostable MVP app layer.
 
-## PR-5 MVP scope
+## PR-6 MVP scope
 
-PR-5 adds the first interaction layer around the existing pipeline (no auth, no DB, no jobs):
-- upload CSV/JSON exports
-- run research pipeline
-- optionally run validation
-- browse summary, position, and player outputs
-- download generated artifacts
+PR-6 keeps model logic stable and improves hosted usability + deployment reliability:
+- cleaner UI cards/tables instead of raw JSON dumps
+- searchable player discovery by name
+- better loading/success/error/empty states
+- configurable storage paths for artifacts/uploads (Railway-safe)
 
-All existing model logic remains script-driven and reusable.
+No auth, DB, jobs, Tiber integration, or model scope expansion were added.
 
 ## Data source
 
@@ -27,31 +26,52 @@ Supported input formats:
    ```bash
    npm install
    ```
-2. Build TypeScript:
+2. Start in local dev watch mode:
    ```bash
-   npm run build
-   ```
-3. Start server:
-   ```bash
-   npm run start
+   npm run dev
    ```
 
-For local development without a build step:
+Or run production-style:
 ```bash
-npm run dev
+npm run build
+npm run start
 ```
 
 Then open `http://localhost:3000`.
 
-### Using the app
+## Storage configuration (local + Railway)
 
-1. Upload a `.csv` or `.json` export on the Run section.
-2. Click **Run pipeline** (optionally enable validation checkbox).
+The server uses configurable storage directories:
+- `ARTIFACT_DIR`: where generated artifacts are written/read
+- `UPLOAD_DIR`: where uploaded files are staged
+
+Defaults (when env vars are not set):
+- `ARTIFACT_DIR=./artifacts`
+- `UPLOAD_DIR=./tmp/uploads`
+
+Directories are created automatically on startup.
+
+### Railway persistent volume guidance
+
+Railway container local filesystem is **not sufficient for persistent artifacts across restarts/redeploys**. Use a mounted volume path and point both storage env vars there.
+
+Example pattern:
+- Mount a Railway volume at `/data`
+- Set:
+  - `ARTIFACT_DIR=/data/artifacts`
+  - `UPLOAD_DIR=/data/uploads`
+
+This follows Railway’s common persistence guidance: volumes are the reliable place for files that must survive restart/redeploy cycles.
+
+## Using the app
+
+1. Upload a `.csv` or `.json` export in **Run research**.
+2. Click **Run pipeline** (optional: run validation).
 3. Review:
-   - Results overview (included rows, positions covered, validation status)
-   - Position browser (curves, peak windows, top/bottom trajectory scores, modifier buckets)
-   - Player search (player detail + reasons + modifier info)
-4. Download artifacts from the Artifacts section.
+   - **Results overview**: included row count, positions covered, validation counts
+   - **Position browser**: age-curve table, peak windows, top/bottom players, modifier bucket counts
+   - **Player search**: find by name (datalist), then inspect player details, flags, reasons, and modifier
+4. Download artifacts from the **Artifacts** section.
 
 ## API routes
 
@@ -63,6 +83,7 @@ Then open `http://localhost:3000`.
 - `GET /api/artifacts/:name`
 - `GET /api/results/summary`
 - `GET /api/results/position/:position`
+- `GET /api/results/players`
 - `GET /api/results/player?playerId=...&season=...`
 
 ## Keep existing CLI scripts
@@ -79,7 +100,7 @@ npm run validation:run
 
 ## Artifacts
 
-Research writes these files into `/artifacts`:
+Research writes these files into `ARTIFACT_DIR`:
 - `age_curves_by_position.json`
 - `age_metric_averages_by_position.json`
 - `age_summary_report.json`
