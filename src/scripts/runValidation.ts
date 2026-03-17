@@ -1,10 +1,8 @@
-import { writeJson } from "../export/writeJson.js";
-import { runValidationSuite } from "../research/validation.js";
+import { buildValidationRun } from "../app/buildValidationRun.js";
 import { logger } from "../utils/logger.js";
 
 async function main() {
-  const report = runValidationSuite();
-  await writeJson("./artifacts", "validation_report.json", report);
+  const report = await buildValidationRun("./artifacts");
   logger.info(`Validation complete: ${report.passedCases}/${report.totalCases} cases passed.`);
   if (report.failedCases > 0) {
     process.exit(1);

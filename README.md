@@ -1,18 +1,17 @@
 # Age-curve-intelligence-model
 
-This repo is a standalone model lab for age-based fantasy football research.
+This repo is a standalone model lab for age-based fantasy football research, now with a thin hostable MVP app layer.
 
-## Current scope (PR-4)
+## PR-5 MVP scope
 
-PR-4 improves calibration, trust, and downstream usability with:
-- position-specific age-curve status/anomaly thresholds for QB/RB/WR/TE
-- position-aware age-band stage classification using peak-window evidence with per-position fallback ages
-- deterministic reason summaries (`productionReason`, `roleReason`, `efficiencyReason`, `overallReasonSummary`)
-- a curated validation pack with archetype expectations and mismatch diagnostics
-- a slim Tiber modifier artifact for conservative downstream scoring adjustments
-- all outputs remain explicit, interpretable, and script-driven (no black-box prediction)
+PR-5 adds the first interaction layer around the existing pipeline (no auth, no DB, no jobs):
+- upload CSV/JSON exports
+- run research pipeline
+- optionally run validation
+- browse summary, position, and player outputs
+- download generated artifacts
 
-There is no API or frontend.
+All existing model logic remains script-driven and reusable.
 
 ## Data source
 
@@ -22,31 +21,65 @@ Supported input formats:
 - `.csv`
 - `.json`
 
-## Run research
+## Run the hostable MVP app
 
 1. Install dependencies:
    ```bash
    npm install
    ```
-2. Run the research script with an input file path:
+2. Build TypeScript:
    ```bash
-   npm run research:run -- --input ./sample-data/tiber-export.json
+   npm run build
    ```
-   Optional flags:
-   - `--outDir ./artifacts` (default `./artifacts`)
+3. Start server:
+   ```bash
+   npm run start
+   ```
 
-## Run validation pack
+For local development without a build step:
+```bash
+npm run dev
+```
 
+Then open `http://localhost:3000`.
+
+### Using the app
+
+1. Upload a `.csv` or `.json` export on the Run section.
+2. Click **Run pipeline** (optionally enable validation checkbox).
+3. Review:
+   - Results overview (included rows, positions covered, validation status)
+   - Position browser (curves, peak windows, top/bottom trajectory scores, modifier buckets)
+   - Player search (player detail + reasons + modifier info)
+4. Download artifacts from the Artifacts section.
+
+## API routes
+
+- `POST /api/run/research`
+  - body: raw file bytes
+  - header: `x-upload-filename: your-file.csv|json`
+- `POST /api/run/validation`
+- `GET /api/artifacts`
+- `GET /api/artifacts/:name`
+- `GET /api/results/summary`
+- `GET /api/results/position/:position`
+- `GET /api/results/player?playerId=...&season=...`
+
+## Keep existing CLI scripts
+
+Research:
+```bash
+npm run research:run -- --input ./sample-data/tiber-export.json
+```
+
+Validation:
 ```bash
 npm run validation:run
 ```
 
-Writes:
-- `validation_report.json`
-
 ## Artifacts
 
-The research script writes these files into `/artifacts`:
+Research writes these files into `/artifacts`:
 - `age_curves_by_position.json`
 - `age_metric_averages_by_position.json`
 - `age_summary_report.json`
@@ -57,18 +90,11 @@ The research script writes these files into `/artifacts`:
 - `tiber_reintegration_player_scores.json`
 - `tiber_age_modifiers.json`
 
-## Inclusion logic
-
-Rows are included when:
-- `age` exists
-- `position` is one of `QB`, `RB`, `WR`, `TE`
-- `games >= 4`
-- either `fantasyPointsPerGame` or `fantasyPointsTotal` exists
+Validation writes:
+- `validation_report.json`
 
 ## Guardrails
 
-- All analytics are computed within each position only.
-- Peer percentiles only use same-position, same-age peers.
-- Minimum sample checks are enforced and low-sample conditions are surfaced as warnings (not hidden).
-- Rules are deterministic and modular; no model training or hidden weighting.
-- Modifier export is bounded and conservative (`boost`, `neutral`, `caution`, `fade`) for downstream adjustments.
+- No auth, DB, or background workers in this MVP.
+- App reads generated artifacts for browsing and downloads.
+- Existing model and research logic remain explicit and source-of-truth.
