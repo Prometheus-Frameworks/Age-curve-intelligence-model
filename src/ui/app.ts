@@ -14,6 +14,7 @@ interface PositionRow {
   ageCurveStatus: string | null;
   ageBandStage: string;
   recommendedModifierBucket: string;
+  overallReasonSummary?: string;
 }
 
 const runForm = document.querySelector<HTMLFormElement>("#run-form")!;
@@ -41,15 +42,63 @@ function setMessage(el: HTMLElement, message: string, level: "error" | "success"
   el.textContent = message;
 }
 
+function formatMetric(value: number | null | undefined, digits = 2) {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return "Data unavailable";
+  }
+  return value.toFixed(digits);
+}
+
+function formatText(value: string | null | undefined, fallback = "Data unavailable") {
+  const clean = value?.trim();
+  return clean ? clean : fallback;
+}
+
+function prettyLabel(value: string | null | undefined, fallback = "Data unavailable") {
+  if (!value) {
+    return fallback;
+  }
+  return value
+    .split("-")
+    .map((part) => (part ? `${part[0].toUpperCase()}${part.slice(1)}` : part))
+    .join(" ");
+}
+
 function card(label: string, value: string | number) {
-  return `<div class="card"><strong>${label}</strong><div>${value}</div></div>`;
+  return `<div class="card"><div class="label">${label}</div><div>${value}</div></div>`;
 }
 
 function badge(value: string | null | undefined, type: "status" | "stage" | "bucket") {
   if (!value) {
-    return "-";
+    return `<span class="chip chip-muted">Data unavailable</span>`;
   }
-  return `<span class="chip chip-${type} chip-${value}">${value}</span>`;
+  return `<span class="chip chip-${type} chip-${value}">${prettyLabel(value)}</span>`;
+}
+
+function playerSummaryLine(row: PositionRow) {
+  const status = row.ageCurveStatus ?? "on";
+  const stage = row.ageBandStage;
+  const bucket = row.recommendedModifierBucket;
+
+  const statusText = status === "ahead" ? "Ahead of age curve" : status === "behind" ? "Behind historical age peers" : "On age curve";
+  const stageText =
+    stage === "pre-peak"
+      ? "pre-peak profile"
+      : stage === "peak-window"
+        ? "in peak window"
+        : stage === "decline-zone"
+          ? "already in decline zone"
+          : "post-peak profile";
+  const bucketText =
+    bucket === "boost"
+      ? "with strong signals"
+      : bucket === "fade"
+        ? "with cautionary signals"
+        : bucket === "caution"
+          ? "with mixed evidence"
+          : "with balanced signals";
+
+  return `${statusText}, ${stageText}, ${bucketText}.`;
 }
 
 function renderSummary(payload: any) {
@@ -60,25 +109,33 @@ function renderSummary(payload: any) {
 
   const meta = payload.latestRunMetadata;
   const validation = payload.validation;
-  const validationPanel = validation
-    ? `<div class="validation-panel ${validation.failedCases === 0 ? "ok" : "warn"}">
-      <div><strong>Total cases:</strong> ${validation.totalCases}</div>
-      <div><strong>Passed:</strong> ${validation.passedCases}</div>
-      <div><strong>Failed:</strong> ${validation.failedCases}</div>
-      ${validation.failedCases > 0 ? `<ul>${validation.failures.map((failure: any) => `<li><strong>${failure.caseName}</strong>: ${(failure.mismatchExplanations ?? []).join("; ")}</li>`).join("")}</ul>` : "<div>All validation checks passed.</div>"}
-    </div>`
-    : "<div class='validation-panel'>Validation has not run yet.</div>";
+  const overallStatus = !validation
+    ? "Validation has not run yet"
+    : validation.failedCases === 0
+      ? "Validation passed"
+      : "Validation needs review";
+
+  const failures = (validation?.failures ?? []) as Array<{ caseName: string; mismatchExplanations?: string[] }>;
 
   summaryEl.innerHTML = `
-    <div class="grid">
-      ${card("Latest file", meta?.lastUploadedFileName ?? "-")}
-      ${card("Last run timestamp", meta?.lastRunTimestamp ?? "-")}
-      ${card("Included rows", meta?.includedRowCount ?? payload.includedRowCount ?? 0)}
-      ${card("Input rows", meta?.inputRowCount ?? "-")}
-      ${card("Positions covered", (payload.positionsCovered ?? []).join(", ") || "None")}
+    <div class="grid summary-grid">
+      ${card("Latest upload", formatText(meta?.lastUploadedFileName, "Data unavailable"))}
+      ${card("Last run", formatText(meta?.lastRunTimestamp, "Data unavailable"))}
+      ${card("Rows included", meta?.includedRowCount ?? payload.includedRowCount ?? 0)}
+      ${card("Rows in input", meta?.inputRowCount ?? "Data unavailable")}
+      ${card("Positions covered", (payload.positionsCovered ?? []).join(", ") || "Data unavailable")}
     </div>
-    <h3>Validation summary</h3>
-    ${validationPanel}
+    <div class="validation-panel ${validation?.failedCases === 0 ? "ok" : "warn"}">
+      <h3>Validation summary</h3>
+      <div class="validation-status">${overallStatus}</div>
+      <div class="validation-stats">
+        <span>Total cases: <strong>${validation?.totalCases ?? 0}</strong></span>
+        <span>Passed: <strong>${validation?.passedCases ?? 0}</strong></span>
+        <span>Failed: <strong>${validation?.failedCases ?? 0}</strong></span>
+      </div>
+      ${failures.length > 0 ? `<ul>${failures.map((failure) => `<li><strong>${failure.caseName}:</strong> ${(failure.mismatchExplanations ?? ["Mismatch found."]).join(" ")}</li>`).join("")}</ul>` : "<p>No validation mismatches.</p>"}
+      <details><summary>Show raw data</summary><pre>${JSON.stringify(payload, null, 2)}</pre></details>
+    </div>
   `;
 }
 
@@ -113,15 +170,26 @@ function applyPositionTable() {
   const tbody = sorted
     .map(
       (row) => `<tr data-player-id="${row.playerId}" data-season="${row.season}">
-      <td>${row.playerName}</td><td>${row.season}</td><td>${row.age}</td><td>${row.ageTrajectoryScore.toFixed(2)}</td>
-      <td>${badge(row.ageCurveStatus, "status")}</td><td>${badge(row.ageBandStage, "stage")}</td><td>${badge(row.recommendedModifierBucket, "bucket")}</td>
+      <td><strong>${row.playerName}</strong></td>
+      <td>${row.season}</td>
+      <td>${row.age}</td>
+      <td>${formatMetric(row.ageTrajectoryScore)}</td>
+      <td>${badge(row.ageCurveStatus, "status")}</td>
+      <td>${badge(row.ageBandStage, "stage")}</td>
+      <td>${badge(row.recommendedModifierBucket, "bucket")}</td>
+      <td>${playerSummaryLine(row)}</td>
     </tr>`
     )
     .join("");
 
   const tableBody = document.querySelector<HTMLElement>("#position-player-table-body");
+  const countEl = document.querySelector<HTMLElement>("#position-counts");
+  if (countEl) {
+    countEl.innerHTML = `Rows loaded: <strong>${currentPositionRows.length}</strong> · After filters: <strong>${sorted.length}</strong>`;
+  }
+
   if (tableBody) {
-    tableBody.innerHTML = tbody || `<tr><td colspan="7">No matching players.</td></tr>`;
+    tableBody.innerHTML = tbody || `<tr><td colspan="8">No players match current filters</td></tr>`;
   }
 
   document.querySelectorAll("#position-player-table-body tr[data-player-id]").forEach((row) => {
@@ -148,25 +216,35 @@ function renderPosition(payload: any) {
   currentPositionRows = payload.playerRows ?? [];
 
   positionResultsEl.innerHTML = `
-    <div class="row">
-      <label>Status <select id="filter-status"><option value="all">all</option><option value="ahead">ahead</option><option value="on">on</option><option value="behind">behind</option></select></label>
-      <label>Stage <select id="filter-stage"><option value="all">all</option><option value="pre-peak">pre-peak</option><option value="peak-window">peak-window</option><option value="post-peak">post-peak</option><option value="decline-zone">decline-zone</option></select></label>
-      <label>Bucket <select id="filter-bucket"><option value="all">all</option><option value="boost">boost</option><option value="neutral">neutral</option><option value="caution">caution</option><option value="fade">fade</option></select></label>
+    <div class="row filters-row">
+      <label>Status <select id="filter-status"><option value="all">All</option><option value="ahead">Ahead of curve</option><option value="on">On curve</option><option value="behind">Behind curve</option></select></label>
+      <label>Stage <select id="filter-stage"><option value="all">All</option><option value="pre-peak">Pre-peak</option><option value="peak-window">Peak window</option><option value="post-peak">Post-peak</option><option value="decline-zone">Decline zone</option></select></label>
+      <label>Bucket <select id="filter-bucket"><option value="all">All</option><option value="boost">Boost</option><option value="neutral">Neutral</option><option value="caution">Caution</option><option value="fade">Fade</option></select></label>
+      <button id="clear-filters" type="button">Clear filters</button>
     </div>
+    <div id="position-counts" class="subtle"></div>
     <table class="table table-clickable">
       <thead><tr>
         <th data-sort="playerName">Player</th>
         <th data-sort="season">Season</th>
         <th data-sort="age">Age</th>
         <th data-sort="ageTrajectoryScore">Trajectory</th>
-        <th>Status</th><th>Stage</th><th>Bucket</th>
+        <th>Status</th><th>Stage</th><th>Bucket</th><th>Summary</th>
       </tr></thead>
       <tbody id="position-player-table-body"></tbody>
     </table>
+    <details><summary>Show raw data</summary><pre>${JSON.stringify(payload, null, 2)}</pre></details>
   `;
 
   ["#filter-status", "#filter-stage", "#filter-bucket"].forEach((selector) => {
     document.querySelector(selector)?.addEventListener("change", applyPositionTable);
+  });
+
+  document.querySelector<HTMLButtonElement>("#clear-filters")?.addEventListener("click", () => {
+    (document.querySelector("#filter-status") as HTMLSelectElement).value = "all";
+    (document.querySelector("#filter-stage") as HTMLSelectElement).value = "all";
+    (document.querySelector("#filter-bucket") as HTMLSelectElement).value = "all";
+    applyPositionTable();
   });
 
   document.querySelectorAll("th[data-sort]").forEach((th) => {
@@ -191,28 +269,44 @@ function renderPlayer(payload: any) {
     return;
   }
 
-  const flags = (payload.flags ?? []).map((flag: any) => `<span class="badge">${flag.label}${flag.severity === "warning" ? " ⚠️" : ""}</span>`).join("") || "None";
+  const flags = (payload.flags ?? []) as Array<{ label: string; severity: "info" | "warning" }>;
+  const flagMarkup =
+    flags.length > 0
+      ? flags.map((flag) => `<li><span class="badge">${flag.label}</span>${flag.severity === "warning" ? " <span class=\"muted\">Limited evidence</span>" : ""}</li>`).join("")
+      : "<li>Data unavailable</li>";
 
   playerResultsEl.innerHTML = `
-    <div class="grid">
-      ${card("Player name", payload.playerName)}
-      ${card("Player ID", payload.playerId)}
-      ${card("Season", payload.season)}
-      ${card("Age", payload.age)}
-      ${card("Position", payload.position)}
-      ${card("Age trajectory score", payload.ageTrajectoryScore ?? "-")}
-      ${card("Age curve status", payload.ageCurveStatus ?? "-")}
-      ${card("Age curve delta", payload.ageCurveDelta ?? "-")}
-      ${card("Age band stage", payload.ageBandStage ?? "-")}
-      ${card("Modifier bucket", payload.recommendedModifierBucket ?? "-")}
-      ${card("Modifier magnitude", payload.modifierMagnitude ?? "-")}
+    <div class="player-header">
+      <h3>${formatText(payload.playerName, "Unknown player")}</h3>
+      <div class="subtle">${formatText(payload.position, "Data unavailable")} · Age ${payload.age ?? "Data unavailable"} · Season ${payload.season ?? "Data unavailable"}</div>
+      <div class="row">
+        ${badge(payload.ageCurveStatus, "status")}
+        ${badge(payload.ageBandStage, "stage")}
+        ${badge(payload.recommendedModifierBucket, "bucket")}
+      </div>
     </div>
-    <h3>Flags</h3><div>${flags}</div>
-    <h3>Reason summaries</h3>
-    <div class="card"><strong>Production</strong><div>${payload.productionReason ?? "-"}</div></div>
-    <div class="card"><strong>Role</strong><div>${payload.roleReason ?? "-"}</div></div>
-    <div class="card"><strong>Efficiency</strong><div>${payload.efficiencyReason ?? "-"}</div></div>
-    <div class="card"><strong>Overall</strong><div>${payload.overallReasonSummary ?? "-"}</div></div>
+
+    <h4>Core metrics</h4>
+    <div class="grid">
+      ${card("Age trajectory score", formatMetric(payload.ageTrajectoryScore))}
+      ${card("Age curve delta", formatMetric(payload.ageCurveDelta))}
+      ${card("Modifier magnitude", formatMetric(payload.modifierMagnitude, 3))}
+    </div>
+
+    <h4>Research interpretation</h4>
+    <div class="card"><strong>Overall</strong><div>${formatText(payload.overallReasonSummary, "Not enough sample yet")}</div></div>
+    <div class="card"><strong>Production</strong><div>${formatText(payload.productionReason, "Not enough sample yet")}</div></div>
+    <div class="card"><strong>Role</strong><div>${formatText(payload.roleReason, "Not enough sample yet")}</div></div>
+    <div class="card"><strong>Efficiency</strong><div>${formatText(payload.efficiencyReason, "Not enough sample yet")}</div></div>
+
+    <h4>Flags</h4>
+    <ul>${flagMarkup}</ul>
+
+    <details>
+      <summary>Show raw data</summary>
+      <div class="subtle">Player ID: ${formatText(payload.playerId)}</div>
+      <pre>${JSON.stringify(payload, null, 2)}</pre>
+    </details>
   `;
 }
 
@@ -283,6 +377,9 @@ async function fetchAndRenderPlayer(playerId: string, season?: string) {
 playerNameInput.addEventListener("input", () => {
   const match = players.find((player) => player.playerName.toLowerCase() === playerNameInput.value.toLowerCase().trim());
   playerIdInput.value = match?.playerId ?? "";
+  if (match) {
+    playerSeasonInput.value = String(match.season);
+  }
 });
 
 runForm.addEventListener("submit", async (event) => {
@@ -345,7 +442,7 @@ playerForm.addEventListener("submit", async (event) => {
   const season = playerSeasonInput.value.trim();
 
   if (!playerId) {
-    playerResultsEl.innerHTML = `<div class="error">No player found for the provided name.</div>`;
+    playerResultsEl.innerHTML = '<div class="status">Select a player to inspect the model output.</div>';
     return;
   }
 
@@ -355,6 +452,8 @@ playerForm.addEventListener("submit", async (event) => {
 document.querySelector<HTMLButtonElement>("#refresh-artifacts")!.addEventListener("click", async () => {
   await loadArtifacts();
 });
+
+playerResultsEl.innerHTML = '<div class="status">Select a player to inspect the model output.</div>';
 
 void loadSummary();
 void loadArtifacts();
