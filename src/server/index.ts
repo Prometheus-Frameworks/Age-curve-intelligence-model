@@ -1,17 +1,21 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { createReadStream } from "node:fs";
 import { extname, join, normalize } from "node:path";
 import { buildResearchRun } from "../app/buildResearchRun.js";
 import { buildValidationRun } from "../app/buildValidationRun.js";
-import { buildPositionSummary, buildResultsSummary, findPlayerResult, listArtifacts } from "../app/artifactIndex.js";
+import { buildPositionSummary, buildResultsSummary, findPlayerResult, listArtifacts, listLatestPlayers } from "../app/artifactIndex.js";
 import { POSITIONS } from "../config/positions.js";
+import { ensureStorageDirs } from "../config/storage.js";
 
 const port = Number(process.env.PORT ?? "3000");
-const artifactDir = join(process.cwd(), "artifacts");
-const uploadDir = join(process.cwd(), "tmp", "uploads");
 const builtUiDir = join(process.cwd(), "dist", "ui");
 const sourceUiDir = join(process.cwd(), "src", "ui");
+
+interface StoragePaths {
+  artifactDir: string;
+  uploadDir: string;
+}
 
 function sendJson(res: ServerResponse, status: number, payload: unknown) {
   res.writeHead(status, { "Content-Type": "application/json" });
@@ -26,7 +30,7 @@ async function readBody(req: IncomingMessage): Promise<Buffer> {
   return Buffer.concat(chunks);
 }
 
-function safeArtifactPath(name: string): string | null {
+function safeArtifactPath(artifactDir: string, name: string): string | null {
   const cleanName = normalize(name).replace(/^([.][./\\])+/, "");
   if (cleanName.includes("..") || cleanName.startsWith("/")) {
     return null;
@@ -34,7 +38,13 @@ function safeArtifactPath(name: string): string | null {
   return join(artifactDir, cleanName);
 }
 
-async function handleApi(req: IncomingMessage, res: ServerResponse, pathname: string, searchParams: URLSearchParams) {
+async function handleApi(
+  req: IncomingMessage,
+  res: ServerResponse,
+  pathname: string,
+  searchParams: URLSearchParams,
+  storage: StoragePaths
+) {
   if (req.method === "POST" && pathname === "/api/run/research") {
     const fileName = req.headers["x-upload-filename"];
     if (typeof fileName !== "string") {
@@ -54,11 +64,11 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, pathname: st
       return;
     }
 
-    const uploadPath = join(uploadDir, `${Date.now()}_${fileName}`);
+    const uploadPath = join(storage.uploadDir, `${Date.now()}_${fileName}`);
     await writeFile(uploadPath, body);
 
     try {
-      const result = await buildResearchRun(uploadPath, artifactDir);
+      const result = await buildResearchRun(uploadPath, storage.artifactDir);
       sendJson(res, 200, { ok: true, result });
     } catch (error) {
       sendJson(res, 500, { ok: false, error: error instanceof Error ? error.message : String(error) });
@@ -68,7 +78,7 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, pathname: st
 
   if (req.method === "POST" && pathname === "/api/run/validation") {
     try {
-      const report = await buildValidationRun(artifactDir);
+      const report = await buildValidationRun(storage.artifactDir);
       sendJson(res, 200, { ok: report.failedCases === 0, report });
     } catch (error) {
       sendJson(res, 500, { ok: false, error: error instanceof Error ? error.message : String(error) });
@@ -77,14 +87,14 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, pathname: st
   }
 
   if (req.method === "GET" && pathname === "/api/artifacts") {
-    const artifacts = await listArtifacts(artifactDir);
+    const artifacts = await listArtifacts(storage.artifactDir);
     sendJson(res, 200, { artifacts });
     return;
   }
 
   if (req.method === "GET" && pathname.startsWith("/api/artifacts/")) {
     const name = decodeURIComponent(pathname.replace("/api/artifacts/", ""));
-    const filePath = safeArtifactPath(name);
+    const filePath = safeArtifactPath(storage.artifactDir, name);
     if (!filePath) {
       sendJson(res, 400, { error: "Invalid artifact path." });
       return;
@@ -101,7 +111,7 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, pathname: st
   }
 
   if (req.method === "GET" && pathname === "/api/results/summary") {
-    const summary = await buildResultsSummary(artifactDir);
+    const summary = await buildResultsSummary(storage.artifactDir);
     if (!summary) {
       sendJson(res, 404, { error: "No run yet. Upload data and run research first." });
       return;
@@ -116,12 +126,22 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, pathname: st
       sendJson(res, 400, { error: "Invalid position. Use QB, RB, WR, or TE." });
       return;
     }
-    const result = await buildPositionSummary(artifactDir, position as (typeof POSITIONS)[number]);
+    const result = await buildPositionSummary(storage.artifactDir, position as (typeof POSITIONS)[number]);
     if (!result) {
       sendJson(res, 404, { error: "No run yet. Upload data and run research first." });
       return;
     }
     sendJson(res, 200, result);
+    return;
+  }
+
+  if (req.method === "GET" && pathname === "/api/results/players") {
+    const players = await listLatestPlayers(storage.artifactDir);
+    if (!players) {
+      sendJson(res, 404, { error: "No run yet. Upload data and run research first." });
+      return;
+    }
+    sendJson(res, 200, { players });
     return;
   }
 
@@ -139,7 +159,7 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, pathname: st
       return;
     }
 
-    const player = await findPlayerResult(artifactDir, playerId, season);
+    const player = await findPlayerResult(storage.artifactDir, playerId, season);
     if (player === null) {
       sendJson(res, 404, { error: "No run yet. Upload data and run research first." });
       return;
@@ -187,13 +207,12 @@ async function handleUi(pathname: string, res: ServerResponse) {
 }
 
 async function main() {
-  await mkdir(artifactDir, { recursive: true });
-  await mkdir(uploadDir, { recursive: true });
+  const storage = await ensureStorageDirs();
 
   const server = createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", `http://${req.headers.host ?? `localhost:${port}`}`);
     if (url.pathname.startsWith("/api/")) {
-      await handleApi(req, res, url.pathname, url.searchParams);
+      await handleApi(req, res, url.pathname, url.searchParams, storage);
       return;
     }
     await handleUi(url.pathname, res);
@@ -201,6 +220,7 @@ async function main() {
 
   server.listen(port, () => {
     console.log(`Age curve MVP running at http://localhost:${port}`);
+    console.log(`Storage: artifacts=${storage.artifactDir} uploads=${storage.uploadDir}`);
   });
 }
 

@@ -7,8 +7,9 @@
     "typecheck": "tsc -p . --noEmit",
     "research:run": "tsx src/scripts/runAgeResearch.ts",
     "validation:run": "tsx src/scripts/runValidation.ts",
-    "dev": "npm run build && node dist/server/index.js",
-    "start": "node dist/server/index.js"
+    "dev": "tsx watch src/server/index.ts",
+    "start": "node dist/server/index.js",
+    "dev:build-start": "npm run build && npm run start"
   },
   "devDependencies": {
     "tsx": "^4.19.2",
