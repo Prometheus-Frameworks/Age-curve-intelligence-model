@@ -37,6 +37,7 @@
           </select>
           <button id="load-position">Load position</button>
         </div>
+        <p>Click column headers to sort. Use filters to narrow rows. Click any player row to load details.</p>
         <div id="position-results" class="content-box">No position loaded.</div>
       </section>
 
@@ -45,7 +46,7 @@
         <form id="player-form" class="row">
           <input id="player-name" list="player-options" placeholder="Search player name" required />
           <datalist id="player-options"></datalist>
-          <input id="player-id" placeholder="playerId" required readonly />
+          <input id="player-id" placeholder="playerId" required />
           <input id="player-season" placeholder="season (optional)" />
           <button type="submit">Lookup</button>
         </form>

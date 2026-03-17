@@ -5,6 +5,17 @@ interface PlayerListItem {
   position: string;
 }
 
+interface PositionRow {
+  playerId: string;
+  playerName: string;
+  season: number;
+  age: number;
+  ageTrajectoryScore: number;
+  ageCurveStatus: string | null;
+  ageBandStage: string;
+  recommendedModifierBucket: string;
+}
+
 const runForm = document.querySelector<HTMLFormElement>("#run-form")!;
 const fileInput = document.querySelector<HTMLInputElement>("#input-file")!;
 const runValidationInput = document.querySelector<HTMLInputElement>("#run-validation")!;
@@ -21,6 +32,9 @@ const playerResultsEl = document.querySelector<HTMLElement>("#player-results")!;
 const artifactList = document.querySelector<HTMLUListElement>("#artifact-list")!;
 
 let players: PlayerListItem[] = [];
+let currentPositionRows: PositionRow[] = [];
+let currentPositionSort: keyof PositionRow = "ageTrajectoryScore";
+let currentPositionSortDir: "asc" | "desc" = "desc";
 
 function setMessage(el: HTMLElement, message: string, level: "error" | "success" | "info" = "info") {
   el.className = level === "info" ? "status" : `status ${level}`;
@@ -31,40 +45,98 @@ function card(label: string, value: string | number) {
   return `<div class="card"><strong>${label}</strong><div>${value}</div></div>`;
 }
 
+function badge(value: string | null | undefined, type: "status" | "stage" | "bucket") {
+  if (!value) {
+    return "-";
+  }
+  return `<span class="chip chip-${type} chip-${value}">${value}</span>`;
+}
+
 function renderSummary(payload: any) {
   if (payload?.error) {
     summaryEl.innerHTML = `<div class="error">${payload.error}</div>`;
     return;
   }
+
+  const meta = payload.latestRunMetadata;
   const validation = payload.validation;
-  const validationHtml = validation
-    ? `${card("Validation passed", validation.passedCases)}${card("Validation failed", validation.failedCases)}${card("Validation total", validation.totalCases)}`
-    : `<div>No validation report yet.</div>`;
-
-  const validationFailures = validation?.failures?.length
-    ? `<ul>${validation.failures
-        .map((failure: any) => `<li><strong>${failure.caseName}</strong>: ${(failure.mismatchExplanations ?? []).join("; ")}</li>`)
-        .join("")}</ul>`
-    : "<div>No validation mismatches.</div>";
-
-  const artifacts = (payload.artifacts ?? []).length
-    ? `<ul>${payload.artifacts.map((artifact: string) => `<li>${artifact}</li>`).join("")}</ul>`
-    : "<div>No artifacts generated yet.</div>";
-
+  const validationPanel = validation
+    ? `<div class="validation-panel ${validation.failedCases === 0 ? "ok" : "warn"}">
+      <div><strong>Total cases:</strong> ${validation.totalCases}</div>
+      <div><strong>Passed:</strong> ${validation.passedCases}</div>
+      <div><strong>Failed:</strong> ${validation.failedCases}</div>
+      ${validation.failedCases > 0 ? `<ul>${validation.failures.map((failure: any) => `<li><strong>${failure.caseName}</strong>: ${(failure.mismatchExplanations ?? []).join("; ")}</li>`).join("")}</ul>` : "<div>All validation checks passed.</div>"}
+    </div>`
+    : "<div class='validation-panel'>Validation has not run yet.</div>";
 
   summaryEl.innerHTML = `
     <div class="grid">
-      ${card("Included row count", payload.includedRowCount ?? 0)}
+      ${card("Latest file", meta?.lastUploadedFileName ?? "-")}
+      ${card("Last run timestamp", meta?.lastRunTimestamp ?? "-")}
+      ${card("Included rows", meta?.includedRowCount ?? payload.includedRowCount ?? 0)}
+      ${card("Input rows", meta?.inputRowCount ?? "-")}
       ${card("Positions covered", (payload.positionsCovered ?? []).join(", ") || "None")}
-      ${card("Generated at", payload.generatedAt ?? "-")}
     </div>
     <h3>Validation summary</h3>
-    <div class="grid">${validationHtml}</div>
-    <h3>Validation failures</h3>
-    ${validationFailures}
-    <h3>Generated artifacts</h3>
-    ${artifacts}
+    ${validationPanel}
   `;
+}
+
+function applyPositionTable() {
+  const statusFilter = (document.querySelector<HTMLSelectElement>("#filter-status")?.value ?? "all").toLowerCase();
+  const stageFilter = (document.querySelector<HTMLSelectElement>("#filter-stage")?.value ?? "all").toLowerCase();
+  const bucketFilter = (document.querySelector<HTMLSelectElement>("#filter-bucket")?.value ?? "all").toLowerCase();
+
+  const filtered = currentPositionRows.filter((row) => {
+    if (statusFilter !== "all" && (row.ageCurveStatus ?? "").toLowerCase() !== statusFilter) {
+      return false;
+    }
+    if (stageFilter !== "all" && row.ageBandStage.toLowerCase() !== stageFilter) {
+      return false;
+    }
+    if (bucketFilter !== "all" && row.recommendedModifierBucket.toLowerCase() !== bucketFilter) {
+      return false;
+    }
+    return true;
+  });
+
+  const sorted = [...filtered].sort((a, b) => {
+    const dir = currentPositionSortDir === "asc" ? 1 : -1;
+    const av = a[currentPositionSort];
+    const bv = b[currentPositionSort];
+    if (typeof av === "number" && typeof bv === "number") {
+      return (av - bv) * dir;
+    }
+    return String(av).localeCompare(String(bv)) * dir;
+  });
+
+  const tbody = sorted
+    .map(
+      (row) => `<tr data-player-id="${row.playerId}" data-season="${row.season}">
+      <td>${row.playerName}</td><td>${row.season}</td><td>${row.age}</td><td>${row.ageTrajectoryScore.toFixed(2)}</td>
+      <td>${badge(row.ageCurveStatus, "status")}</td><td>${badge(row.ageBandStage, "stage")}</td><td>${badge(row.recommendedModifierBucket, "bucket")}</td>
+    </tr>`
+    )
+    .join("");
+
+  const tableBody = document.querySelector<HTMLElement>("#position-player-table-body");
+  if (tableBody) {
+    tableBody.innerHTML = tbody || `<tr><td colspan="7">No matching players.</td></tr>`;
+  }
+
+  document.querySelectorAll("#position-player-table-body tr[data-player-id]").forEach((row) => {
+    row.addEventListener("click", async () => {
+      const playerId = (row as HTMLElement).dataset.playerId ?? "";
+      const season = (row as HTMLElement).dataset.season ?? "";
+      playerIdInput.value = playerId;
+      playerSeasonInput.value = season;
+      const match = players.find((p) => p.playerId === playerId);
+      if (match) {
+        playerNameInput.value = match.playerName;
+      }
+      await fetchAndRenderPlayer(playerId, season);
+    });
+  });
 }
 
 function renderPosition(payload: any) {
@@ -73,44 +145,44 @@ function renderPosition(payload: any) {
     return;
   }
 
-  const curveRows = (payload.ageCurves ?? [])
-    .map(
-      (row: any) =>
-        `<tr><td>${row.age}</td><td>${row.seasonCount}</td><td>${row.avgFantasyPointsPerGame ?? "-"}</td><td>${row.smoothedAvgFantasyPointsPerGame ?? "-"}</td><td>${row.lowSampleWarning ? "yes" : "no"}</td></tr>`
-    )
-    .join("");
-
-  const topRows = (payload.topPlayers ?? [])
-    .map((row: any) => `<li>${row.playerName} (${row.playerId}) - ${row.ageTrajectoryScore}</li>`)
-    .join("");
-  const bottomRows = (payload.bottomPlayers ?? [])
-    .map((row: any) => `<li>${row.playerName} (${row.playerId}) - ${row.ageTrajectoryScore}</li>`)
-    .join("");
-
-  const modifierBuckets = Object.entries(payload.modifierBucketCounts ?? {})
-    .map(([bucket, count]) => `<li>${bucket}: ${count}</li>`)
-    .join("");
-
-  const peakSummary = (payload.peakWindows ?? [])
-    .map((w: any) => `${w.metric}: ages ${w.peakWindowStartAge ?? "-"}-${w.peakWindowEndAge ?? "-"} (peak ${w.peakAge ?? "-"})`)
-    .join("; ");
+  currentPositionRows = payload.playerRows ?? [];
 
   positionResultsEl.innerHTML = `
-    <h3>${payload.position} peak window summary</h3>
-    <div>${peakSummary || "No position data."}</div>
-
-    <h3>Age curves</h3>
-    ${curveRows ? `<table class="table"><thead><tr><th>Age</th><th>Samples</th><th>Avg PPG</th><th>Smoothed Avg PPG</th><th>Low sample</th></tr></thead><tbody>${curveRows}</tbody></table>` : "<div>No position data.</div>"}
-
-    <h3>Top 5 players</h3>
-    <ul>${topRows || "<li>No position data.</li>"}</ul>
-
-    <h3>Bottom 5 players</h3>
-    <ul>${bottomRows || "<li>No position data.</li>"}</ul>
-
-    <h3>Modifier bucket counts</h3>
-    <ul>${modifierBuckets || "<li>No position data.</li>"}</ul>
+    <div class="row">
+      <label>Status <select id="filter-status"><option value="all">all</option><option value="ahead">ahead</option><option value="on">on</option><option value="behind">behind</option></select></label>
+      <label>Stage <select id="filter-stage"><option value="all">all</option><option value="pre-peak">pre-peak</option><option value="peak-window">peak-window</option><option value="post-peak">post-peak</option><option value="decline-zone">decline-zone</option></select></label>
+      <label>Bucket <select id="filter-bucket"><option value="all">all</option><option value="boost">boost</option><option value="neutral">neutral</option><option value="caution">caution</option><option value="fade">fade</option></select></label>
+    </div>
+    <table class="table table-clickable">
+      <thead><tr>
+        <th data-sort="playerName">Player</th>
+        <th data-sort="season">Season</th>
+        <th data-sort="age">Age</th>
+        <th data-sort="ageTrajectoryScore">Trajectory</th>
+        <th>Status</th><th>Stage</th><th>Bucket</th>
+      </tr></thead>
+      <tbody id="position-player-table-body"></tbody>
+    </table>
   `;
+
+  ["#filter-status", "#filter-stage", "#filter-bucket"].forEach((selector) => {
+    document.querySelector(selector)?.addEventListener("change", applyPositionTable);
+  });
+
+  document.querySelectorAll("th[data-sort]").forEach((th) => {
+    th.addEventListener("click", () => {
+      const key = (th as HTMLElement).dataset.sort as keyof PositionRow;
+      if (currentPositionSort === key) {
+        currentPositionSortDir = currentPositionSortDir === "asc" ? "desc" : "asc";
+      } else {
+        currentPositionSort = key;
+        currentPositionSortDir = key === "playerName" ? "asc" : "desc";
+      }
+      applyPositionTable();
+    });
+  });
+
+  applyPositionTable();
 }
 
 function renderPlayer(payload: any) {
@@ -123,15 +195,19 @@ function renderPlayer(payload: any) {
 
   playerResultsEl.innerHTML = `
     <div class="grid">
-      ${card("Player", `${payload.playerName} (${payload.playerId})`)}
+      ${card("Player name", payload.playerName)}
+      ${card("Player ID", payload.playerId)}
       ${card("Season", payload.season)}
-      ${card("Position", payload.position)}
       ${card("Age", payload.age)}
-      ${card("Age Trajectory Score", payload.ageTrajectoryScore ?? "-")}
-      ${card("Modifier", `${payload.recommendedModifierBucket ?? "-"} (${payload.modifierMagnitude ?? "-"})`)}
+      ${card("Position", payload.position)}
+      ${card("Age trajectory score", payload.ageTrajectoryScore ?? "-")}
+      ${card("Age curve status", payload.ageCurveStatus ?? "-")}
+      ${card("Age curve delta", payload.ageCurveDelta ?? "-")}
+      ${card("Age band stage", payload.ageBandStage ?? "-")}
+      ${card("Modifier bucket", payload.recommendedModifierBucket ?? "-")}
+      ${card("Modifier magnitude", payload.modifierMagnitude ?? "-")}
     </div>
-    <h3>Flags</h3>
-    <div>${flags}</div>
+    <h3>Flags</h3><div>${flags}</div>
     <h3>Reason summaries</h3>
     <div class="card"><strong>Production</strong><div>${payload.productionReason ?? "-"}</div></div>
     <div class="card"><strong>Role</strong><div>${payload.roleReason ?? "-"}</div></div>
@@ -140,27 +216,20 @@ function renderPlayer(payload: any) {
   `;
 }
 
-function renderValidationFromRun(validationPayload: any): string {
-  if (!validationPayload?.report) {
-    return "Validation did not run.";
-  }
-
-  const report = validationPayload.report;
-  const failures = (report.results ?? [])
-    .filter((testCase: any) => !testCase.pass)
-    .map((testCase: any) => `<li>${testCase.caseName}: ${(testCase.mismatchExplanations ?? []).join("; ")}</li>`)
-    .join("");
-
-  return `Validation ${report.failedCases === 0 ? "succeeded" : "completed with failures"}: ${report.passedCases}/${report.totalCases} passed.${
-    failures ? `<ul>${failures}</ul>` : ""
-  }`;
-}
-
-
 async function loadSummary() {
   const response = await fetch("/api/results/summary");
   const payload = await response.json();
   renderSummary(payload);
+}
+
+function artifactLabel(name: string) {
+  if (name.includes("summary")) return "summary";
+  if (name.includes("curve")) return "curves";
+  if (name.includes("score")) return "scores";
+  if (name.includes("modifier")) return "modifiers";
+  if (name.includes("validation")) return "validation";
+  if (name.includes("latest_run_metadata")) return "latest run metadata";
+  return "artifact";
 }
 
 async function loadArtifacts() {
@@ -176,12 +245,7 @@ async function loadArtifacts() {
 
   for (const artifact of artifacts) {
     const li = document.createElement("li");
-    const link = document.createElement("a");
-    const label = artifact.includes("validation") ? "validation" : "research";
-    link.href = `/api/artifacts/${artifact}`;
-    link.textContent = `Download ${artifact}`;
-    li.innerHTML = `<strong>[${label}]</strong> `;
-    li.appendChild(link);
+    li.innerHTML = `<span class="artifact-tag">${artifactLabel(artifact)}</span> <a href="/api/artifacts/${artifact}">${artifact}</a>`;
     artifactList.appendChild(li);
   }
 }
@@ -206,6 +270,16 @@ async function loadPlayers() {
   }
 }
 
+async function fetchAndRenderPlayer(playerId: string, season?: string) {
+  const params = new URLSearchParams({ playerId });
+  if (season) {
+    params.set("season", season);
+  }
+  const response = await fetch(`/api/results/player?${params.toString()}`);
+  const payload = await response.json();
+  renderPlayer(payload);
+}
+
 playerNameInput.addEventListener("input", () => {
   const match = players.find((player) => player.playerName.toLowerCase() === playerNameInput.value.toLowerCase().trim());
   playerIdInput.value = match?.playerId ?? "";
@@ -219,37 +293,39 @@ runForm.addEventListener("submit", async (event) => {
     return;
   }
 
-  setMessage(runStatus, "Upload in progress and running research...");
+  setMessage(runStatus, `Running pipeline for ${file.name}...`);
+  try {
+    const runResponse = await fetch("/api/run/research", {
+      method: "POST",
+      headers: { "x-upload-filename": file.name },
+      body: file
+    });
+    const runPayload = await runResponse.json();
 
-  const runResponse = await fetch("/api/run/research", {
-    method: "POST",
-    headers: { "x-upload-filename": file.name },
-    body: file
-  });
-  const runPayload = await runResponse.json();
+    if (!runResponse.ok) {
+      setMessage(runStatus, `Research failure: ${runPayload.error ?? "Unknown error"}`, "error");
+      return;
+    }
 
-  if (!runResponse.ok) {
-    setMessage(runStatus, `Bad upload or research failure: ${runPayload.error ?? "Unknown error"}`, "error");
-    return;
+    if (runValidationInput.checked) {
+      setMessage(runStatus, "Research complete. Running validation...");
+      const validationResponse = await fetch("/api/run/validation", { method: "POST" });
+      const validationPayload = await validationResponse.json();
+      if (!validationResponse.ok) {
+        setMessage(runStatus, `Validation failed to run: ${validationPayload.error ?? "Unknown error"}`, "error");
+      } else {
+        setMessage(runStatus, `Run succeeded for ${file.name}. Included ${runPayload.result?.includedRows ?? 0}/${runPayload.result?.inputRows ?? 0} rows.`, "success");
+      }
+    } else {
+      setMessage(runStatus, `Run succeeded for ${file.name}. Included ${runPayload.result?.includedRows ?? 0}/${runPayload.result?.inputRows ?? 0} rows.`, "success");
+    }
+
+    await loadSummary();
+    await loadArtifacts();
+    await loadPlayers();
+  } catch (error) {
+    setMessage(runStatus, `Pipeline failed: ${error instanceof Error ? error.message : String(error)}`, "error");
   }
-
-  let validationText = "";
-  if (runValidationInput.checked) {
-    setMessage(runStatus, "Research complete. Running validation...");
-    const validationResponse = await fetch("/api/run/validation", { method: "POST" });
-    const validationPayload = await validationResponse.json();
-    validationText = ` ${renderValidationFromRun(validationPayload)}`;
-  }
-
-  setMessage(
-    runStatus,
-    `Research complete. Included ${runPayload.result?.includedRows ?? 0} rows from ${runPayload.result?.inputRows ?? 0} input rows.${validationText}`,
-    "success"
-  );
-
-  await loadSummary();
-  await loadArtifacts();
-  await loadPlayers();
 });
 
 document.querySelector<HTMLButtonElement>("#refresh-summary")!.addEventListener("click", async () => {
@@ -273,14 +349,7 @@ playerForm.addEventListener("submit", async (event) => {
     return;
   }
 
-  const params = new URLSearchParams({ playerId });
-  if (season) {
-    params.set("season", season);
-  }
-
-  const response = await fetch(`/api/results/player?${params.toString()}`);
-  const payload = await response.json();
-  renderPlayer(payload);
+  await fetchAndRenderPlayer(playerId, season);
 });
 
 document.querySelector<HTMLButtonElement>("#refresh-artifacts")!.addEventListener("click", async () => {

@@ -11,6 +11,7 @@ import type {
   TiberAgeModifierArtifact,
   ValidationReport
 } from "../types/research.js";
+import { readLatestRunMetadata } from "./latestRunMetadata.js";
 
 const RESEARCH_ARTIFACT_NAMES = [
   "age_curves_by_position.json",
@@ -82,12 +83,14 @@ export async function buildResultsSummary(artifactDir: string) {
   const positionsCovered = data.ageSummary.positions.filter((p) => p.totalIncludedSeasons > 0).map((p) => p.position);
   const artifactNames = await listArtifacts(artifactDir);
   const validation = await readLatestValidation(artifactDir);
+  const latestRunMetadata = await readLatestRunMetadata(artifactDir);
 
   return {
     generatedAt: data.ageSummary.generatedAt,
     includedRowCount: totalIncludedRows,
     positionsCovered,
     artifacts: artifactNames,
+    latestRunMetadata,
     validation: validation
       ? {
           generatedAt: validation.generatedAt,
@@ -121,16 +124,30 @@ export async function buildPositionSummary(artifactDir: string, position: Positi
     return acc;
   }, {});
 
+  const playerRows = sorted.map((row) => {
+    const modifier = data.ageModifiers.rows.find((m) => m.playerId === row.playerId && m.season === row.season);
+    return {
+      playerId: row.playerId,
+      playerName: row.playerName,
+      season: row.season,
+      age: row.age,
+      ageTrajectoryScore: row.ageTrajectoryScore,
+      ageCurveStatus: row.ageCurveStatus,
+      ageBandStage: row.ageBandStage,
+      recommendedModifierBucket: modifier?.recommendedModifierBucket ?? "neutral"
+    };
+  });
+
   return {
     position,
     ageCurves: data.ageCurves[position] ?? [],
     peakWindows: data.peakWindows[position] ?? [],
     topPlayers,
     bottomPlayers,
+    playerRows,
     modifierBucketCounts: modifierCounts
   };
 }
-
 
 export async function listLatestPlayers(artifactDir: string) {
   const data = await readLatestArtifacts(artifactDir);
