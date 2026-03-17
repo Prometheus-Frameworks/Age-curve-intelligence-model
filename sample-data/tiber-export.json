@@ -1,0 +1,70 @@
+[
+  {
+    "player_id": "p1",
+    "player_name": "Alpha QB",
+    "season": 2022,
+    "age": 25,
+    "position": "QB",
+    "games": 17,
+    "fantasy_points_total": 320,
+    "fantasy_points_per_game": 18.8,
+    "pass_yards_per_game": 265.1,
+    "rush_yards_per_game": 21.3,
+    "xfp_diff": 1.4
+  },
+  {
+    "player_id": "p2",
+    "player_name": "Beta RB",
+    "season": 2022,
+    "age": 24,
+    "position": "RB",
+    "games": 16,
+    "fantasy_points_total": 240,
+    "fantasy_points_per_game": 15,
+    "carries_per_game": 14.2,
+    "targets_per_game": 3.2,
+    "rush_share_pct": 0.58,
+    "target_share_pct": 0.11,
+    "ypc": 4.4,
+    "boom_pct": 0.21
+  },
+  {
+    "player_id": "p3",
+    "player_name": "Gamma WR",
+    "season": 2022,
+    "age": 27,
+    "position": "WR",
+    "games": 15,
+    "fantasy_points_per_game": 14.5,
+    "targets_per_game": 8.1,
+    "target_share_pct": 0.25,
+    "route_participation_pct": 0.88,
+    "receiving_yards_per_game": 82.1,
+    "ypr": 13.9,
+    "boom_pct": 0.28
+  },
+  {
+    "player_id": "p4",
+    "player_name": "Delta TE",
+    "season": 2022,
+    "age": 29,
+    "position": "TE",
+    "games": 14,
+    "fantasy_points_per_game": 11.2,
+    "targets_per_game": 6.3,
+    "target_share_pct": 0.2,
+    "route_participation_pct": 0.79,
+    "receiving_yards_per_game": 59.4,
+    "ypr": 11.1,
+    "boom_pct": 0.17
+  },
+  {
+    "player_id": "p5",
+    "player_name": "Filtered Out",
+    "season": 2022,
+    "age": 22,
+    "position": "WR",
+    "games": 3,
+    "fantasy_points_per_game": 8.1
+  }
+]
