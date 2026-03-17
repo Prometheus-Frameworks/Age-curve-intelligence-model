@@ -1,14 +1,13 @@
 import { METRICS_BY_POSITION, type MetricKey } from "../config/metrics.js";
 import { POSITIONS, type Position } from "../config/positions.js";
 import {
-  ANOMALY_DELTA_THRESHOLD,
-  AHEAD_OF_CURVE_DELTA_THRESHOLD,
-  BEHIND_CURVE_DELTA_THRESHOLD,
+  CURVE_STATUS_THRESHOLDS_BY_POSITION,
   HIGH_CONFIDENCE_PEER_SAMPLE,
   MEDIUM_CONFIDENCE_PEER_SAMPLE,
   MIN_CORRELATION_SAMPLE,
   MIN_PEAK_WINDOW_SAMPLE,
-  MIN_PEER_SAMPLE
+  MIN_PEER_SAMPLE,
+  STAGE_FALLBACK_AGES_BY_POSITION
 } from "../config/thresholds.js";
 import type { NormalizedPlayerSeasonRow } from "../types/normalized.js";
 import type {
@@ -18,6 +17,7 @@ import type {
   AgeCurveRelativeStatus,
   AgePeakWindowsByPosition,
   AgeTrajectoryScoresByPosition,
+  ModifierBucket,
   PeerSampleMetadata,
   PlayerAgePeerProfileByPosition,
   PositionAgeCorrelation,
@@ -26,6 +26,7 @@ import type {
   PositionPlayerAgePeerProfile,
   RuleFlag,
   ScoreComponent,
+  TiberAgeModifierArtifact,
   TiberReintegrationArtifact
 } from "../types/research.js";
 import { groupBy } from "../utils/groupBy.js";
@@ -33,6 +34,13 @@ import { groupBy } from "../utils/groupBy.js";
 interface NumericSample {
   age: number;
   metricValue: number;
+}
+
+interface ReasonSummaries {
+  productionReason: string;
+  roleReason: string;
+  efficiencyReason: string;
+  overallReasonSummary: string;
 }
 
 function toNumeric(value: number | null | undefined): number | null {
@@ -95,10 +103,7 @@ function percentileRank(value: number, peerValues: number[]): number {
   return ((less + 0.5 * equal) / peerValues.length) * 100;
 }
 
-function buildPositionSamples(
-  positionRows: NormalizedPlayerSeasonRow[],
-  metric: MetricKey
-): NumericSample[] {
+function buildPositionSamples(positionRows: NormalizedPlayerSeasonRow[], metric: MetricKey): NumericSample[] {
   const samples: NumericSample[] = [];
 
   for (const row of positionRows) {
@@ -136,30 +141,53 @@ function buildAgeCurveLookup(ageCurves: AgeCurveByPosition, position: Position):
   return lookup;
 }
 
-function toAgeCurveStatus(delta: number | null): AgeCurveRelativeStatus | null {
+function toAgeCurveStatus(delta: number | null, position: Position): AgeCurveRelativeStatus | null {
   if (delta === null) {
     return null;
   }
-  if (delta >= AHEAD_OF_CURVE_DELTA_THRESHOLD) {
+
+  const thresholds = CURVE_STATUS_THRESHOLDS_BY_POSITION[position];
+  if (delta >= thresholds.ahead) {
     return "ahead";
   }
-  if (delta <= BEHIND_CURVE_DELTA_THRESHOLD) {
+  if (delta <= thresholds.behind) {
     return "behind";
   }
   return "on";
 }
 
-function toAgeBandStage(age: number, peakAge: number | null): AgeBandStage {
-  if (peakAge === null) {
-    return age < 27 ? "pre-peak" : "post-peak";
+function toAgeBandStage(age: number, position: Position, peakMetric: PositionPeakMetric | undefined): AgeBandStage {
+  const fallback = STAGE_FALLBACK_AGES_BY_POSITION[position];
+  const hasStrongPeakWindow = Boolean(
+    peakMetric &&
+      peakMetric.peakWindowStartAge !== null &&
+      peakMetric.peakWindowEndAge !== null &&
+      peakMetric.peakWindowSampleSize >= MIN_PEAK_WINDOW_SAMPLE * 2
+  );
+
+  if (hasStrongPeakWindow && peakMetric) {
+    const peakStart = peakMetric.peakWindowStartAge as number;
+    const peakEnd = peakMetric.peakWindowEndAge as number;
+
+    if (age < peakStart) {
+      return "pre-peak";
+    }
+    if (age <= peakEnd) {
+      return "peak-window";
+    }
+    if (age <= peakEnd + 3) {
+      return "post-peak";
+    }
+    return "decline-zone";
   }
-  if (age <= peakAge - 2) {
+
+  if (age <= fallback.prePeakMax) {
     return "pre-peak";
   }
-  if (Math.abs(age - peakAge) <= 1) {
+  if (age <= fallback.peakWindowEnd) {
     return "peak-window";
   }
-  if (age <= peakAge + 3) {
+  if (age <= fallback.postPeakEnd) {
     return "post-peak";
   }
   return "decline-zone";
@@ -169,15 +197,16 @@ function buildRuleFlags(
   delta: number | null,
   status: AgeCurveRelativeStatus | null,
   stage: AgeBandStage,
-  components: ScoreComponent[]
+  components: ScoreComponent[],
+  position: Position
 ): RuleFlag[] {
   const flags: RuleFlag[] = [];
 
-  if (delta !== null && Math.abs(delta) >= ANOMALY_DELTA_THRESHOLD) {
+  if (delta !== null && Math.abs(delta) >= CURVE_STATUS_THRESHOLDS_BY_POSITION[position].anomaly) {
     flags.push({
       code: "age_curve_anomaly",
       label: "Age-curve anomaly",
-      message: `Performance delta ${delta.toFixed(2)} FPPG from smoothed age baseline is unusually large.`,
+      message: `Performance delta ${delta.toFixed(2)} FPPG from smoothed age baseline is unusually large for ${position}.`,
       severity: "warning"
     });
   }
@@ -222,6 +251,70 @@ function buildRuleFlags(
   return flags;
 }
 
+function averagePercentile(components: ScoreComponent[], metrics: MetricKey[]): number | null {
+  const selected = components.filter((component) => metrics.includes(component.metric));
+  if (selected.length === 0) {
+    return null;
+  }
+
+  const weighted = selected.reduce((sum, component) => sum + component.weightedContribution, 0);
+  const weight = selected.reduce((sum, component) => sum + component.weight, 0);
+  return weight > 0 ? weighted / weight : null;
+}
+
+function describeSignal(area: string, percentile: number | null, lowConfidenceCount: number): string {
+  if (percentile === null) {
+    return `${area} signal is unavailable from reliable same-age peer samples.`;
+  }
+
+  const direction = percentile >= 60 ? "ahead of age peers" : percentile <= 40 ? "lagging age peers" : "near age-peer norms";
+  const confidenceNote = lowConfidenceCount > 0 ? " Peer confidence is mixed due to low-sample comparisons." : "";
+  return `${area} is ${direction} (${percentile.toFixed(1)}th percentile).${confidenceNote}`;
+}
+
+function buildReasonSummaries(
+  components: ScoreComponent[],
+  status: AgeCurveRelativeStatus | null,
+  flags: RuleFlag[]
+): ReasonSummaries {
+  const productionMetrics: MetricKey[] = ["fantasyPointsPerGame"];
+  const roleMetrics: MetricKey[] = ["targetsPerGame", "targetSharePct", "routeParticipationPct", "carriesPerGame", "rushSharePct", "touchesPerGame"];
+  const efficiencyMetrics: MetricKey[] = ["ypc", "ypr", "recYardsPerGame", "rushYardsPerGame", "passYardsPerGame", "xfpDiff", "boomPct"];
+
+  const productionPercentile = averagePercentile(components, productionMetrics);
+  const rolePercentile = averagePercentile(components, roleMetrics);
+  const efficiencyPercentile = averagePercentile(components, efficiencyMetrics);
+  const lowConfidenceCount = flags.some((flag) => flag.code === "low_peer_sample") ? 1 : 0;
+
+  const productionReason = describeSignal("Production", productionPercentile, lowConfidenceCount);
+  const roleReason = describeSignal("Role", rolePercentile, lowConfidenceCount);
+  const efficiencyReason = describeSignal("Efficiency", efficiencyPercentile, lowConfidenceCount);
+
+  const statusText =
+    status === "ahead"
+      ? "ahead of curve"
+      : status === "behind"
+        ? "behind curve"
+        : status === "on"
+          ? "on curve"
+          : "inconclusive versus curve";
+  const strongest = [
+    { name: "production", value: productionPercentile },
+    { name: "role", value: rolePercentile },
+    { name: "efficiency", value: efficiencyPercentile }
+  ].sort((a, b) => (b.value ?? -1) - (a.value ?? -1))[0];
+
+  const warningNote = flags.some((flag) => flag.severity === "warning") ? " Caution: warning flags are active." : "";
+  const overallReasonSummary = `Overall: ${statusText} because ${strongest.value === null ? "evidence is limited" : `${strongest.name} is the strongest peer-relative signal`}.${warningNote}`;
+
+  return {
+    productionReason,
+    roleReason,
+    efficiencyReason,
+    overallReasonSummary
+  };
+}
+
 function buildInterpretation(status: AgeCurveRelativeStatus | null, stage: AgeBandStage, flags: RuleFlag[]): string {
   const statusText =
     status === null ? "unknown relative to historical curve" : status === "ahead" ? "ahead of" : status === "behind" ? "behind" : "on";
@@ -237,7 +330,7 @@ function calculateTrajectoryScore(
   row: NormalizedPlayerSeasonRow,
   metrics: MetricKey[],
   sameAgeRows: NormalizedPlayerSeasonRow[],
-  positionPeakAge: number | null,
+  peakMetric: PositionPeakMetric | undefined,
   smoothedAgeBaseline: number | null
 ): PositionAgeTrajectoryScore {
   const components: ScoreComponent[] = [];
@@ -277,9 +370,10 @@ function calculateTrajectoryScore(
   }
 
   const ageCurveDelta = row.fantasyPointsPerGame !== null && smoothedAgeBaseline !== null ? row.fantasyPointsPerGame - smoothedAgeBaseline : null;
-  const ageCurveStatus = toAgeCurveStatus(ageCurveDelta);
-  const ageBandStage = toAgeBandStage(row.age, positionPeakAge);
-  const flags = buildRuleFlags(ageCurveDelta, ageCurveStatus, ageBandStage, components);
+  const ageCurveStatus = toAgeCurveStatus(ageCurveDelta, row.position);
+  const ageBandStage = toAgeBandStage(row.age, row.position, peakMetric);
+  const flags = buildRuleFlags(ageCurveDelta, ageCurveStatus, ageBandStage, components, row.position);
+  const reasons = buildReasonSummaries(components, ageCurveStatus, flags);
 
   return {
     playerId: row.playerId,
@@ -294,9 +388,29 @@ function calculateTrajectoryScore(
     ageCurveStatus,
     ageBandStage,
     flags,
+    productionReason: reasons.productionReason,
+    roleReason: reasons.roleReason,
+    efficiencyReason: reasons.efficiencyReason,
+    overallReasonSummary: reasons.overallReasonSummary,
     interpretation: buildInterpretation(ageCurveStatus, ageBandStage, flags),
     components
   };
+}
+
+function determineModifierBucket(score: PositionAgeTrajectoryScore): { bucket: ModifierBucket; magnitude: number } {
+  const warningCount = score.flags.filter((flag) => flag.severity === "warning").length;
+  const delta = score.ageCurveDelta ?? 0;
+
+  if (score.ageBandStage === "decline-zone" && (score.ageCurveStatus === "behind" || warningCount >= 2)) {
+    return { bucket: "fade", magnitude: -0.12 };
+  }
+  if (score.ageCurveStatus === "ahead" && warningCount === 0 && score.componentCount >= 2) {
+    return { bucket: "boost", magnitude: 0.1 };
+  }
+  if (score.ageCurveStatus === "behind" || warningCount > 0 || delta < -0.08) {
+    return { bucket: "caution", magnitude: -0.06 };
+  }
+  return { bucket: "neutral", magnitude: 0 };
 }
 
 export function buildAgeCorrelationsByPosition(rows: NormalizedPlayerSeasonRow[]): AgeCorrelationByPosition {
@@ -384,8 +498,7 @@ export function buildPeakWindowsByPosition(rows: NormalizedPlayerSeasonRow[]): A
           continue;
         }
 
-        const combinedAvg =
-          (current.avgValue * current.sampleSize + next.avgValue * next.sampleSize) / combinedSample;
+        const combinedAvg = (current.avgValue * current.sampleSize + next.avgValue * next.sampleSize) / combinedSample;
 
         if (peakWindowAverage === null || combinedAvg > peakWindowAverage) {
           peakWindowStartAge = current.age;
@@ -485,12 +598,12 @@ export function buildAgeTrajectoryScoresByPosition(
     const positionRows = byPosition.get(position) ?? [];
     const ageBuckets = groupBy(positionRows, (row) => row.age);
     const curveLookup = buildAgeCurveLookup(ageCurves, position);
-    const positionPeakAge = peakWindows[position]?.find((entry) => entry.metric === "fantasyPointsPerGame")?.peakAge ?? null;
+    const peakMetric = peakWindows[position]?.find((entry) => entry.metric === "fantasyPointsPerGame");
 
     const scores: PositionAgeTrajectoryScore[] = positionRows.map((row) => {
       const sameAgeRows = ageBuckets.get(row.age) ?? [];
       const smoothedAgeBaseline = curveLookup.get(row.age) ?? null;
-      return calculateTrajectoryScore(row, metrics, sameAgeRows, positionPeakAge, smoothedAgeBaseline);
+      return calculateTrajectoryScore(row, metrics, sameAgeRows, peakMetric, smoothedAgeBaseline);
     });
 
     result[position] = sortByAge(scores);
@@ -511,10 +624,40 @@ export function buildTiberReintegrationArtifact(scoresByPosition: AgeTrajectoryS
     ageCurveDelta: score.ageCurveDelta,
     ageBandStage: score.ageBandStage,
     interpretation: score.interpretation,
+    productionReason: score.productionReason,
+    roleReason: score.roleReason,
+    efficiencyReason: score.efficiencyReason,
+    overallReasonSummary: score.overallReasonSummary,
     flagCodes: score.flags.map((flag) => flag.code),
     hasWarningFlag: score.flags.some((flag) => flag.severity === "warning"),
     componentCount: score.componentCount
   }));
+
+  return {
+    generatedAt: new Date().toISOString(),
+    rows
+  };
+}
+
+export function buildTiberAgeModifierArtifact(scoresByPosition: AgeTrajectoryScoresByPosition): TiberAgeModifierArtifact {
+  const rows = POSITIONS.flatMap((position) => scoresByPosition[position] ?? []).map((score) => {
+    const { bucket, magnitude } = determineModifierBucket(score);
+
+    return {
+      playerId: score.playerId,
+      season: score.season,
+      age: score.age,
+      position: score.position,
+      ageTrajectoryScore: score.ageTrajectoryScore,
+      ageCurveStatus: score.ageCurveStatus,
+      ageCurveDelta: score.ageCurveDelta,
+      ageBandStage: score.ageBandStage,
+      hasWarningFlag: score.flags.some((flag) => flag.severity === "warning"),
+      flagCodes: score.flags.map((flag) => flag.code),
+      recommendedModifierBucket: bucket,
+      modifierMagnitude: magnitude
+    };
+  });
 
   return {
     generatedAt: new Date().toISOString(),

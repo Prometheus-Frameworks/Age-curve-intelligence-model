@@ -5,7 +5,8 @@
   "scripts": {
     "build": "tsc -p .",
     "typecheck": "tsc -p . --noEmit",
-    "research:run": "tsx src/scripts/runAgeResearch.ts"
+    "research:run": "tsx src/scripts/runAgeResearch.ts",
+    "validation:run": "tsx src/scripts/runValidation.ts"
   },
   "devDependencies": {
     "tsx": "^4.19.2",
