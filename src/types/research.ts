@@ -227,3 +227,17 @@ export interface ValidationReport {
   failedCases: number;
   results: ValidationCaseResult[];
 }
+
+export interface LatestRunMetadata {
+  generatedAt: string;
+  lastUploadedFileName: string;
+  lastRunTimestamp: string;
+  inputRowCount: number;
+  includedRowCount: number;
+  validationRan: boolean;
+  validationSummary: {
+    totalCases: number;
+    passedCases: number;
+    failedCases: number;
+  } | null;
+}

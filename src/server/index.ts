@@ -68,7 +68,7 @@ async function handleApi(
     await writeFile(uploadPath, body);
 
     try {
-      const result = await buildResearchRun(uploadPath, storage.artifactDir);
+      const result = await buildResearchRun(uploadPath, storage.artifactDir, fileName);
       sendJson(res, 200, { ok: true, result });
     } catch (error) {
       sendJson(res, 500, { ok: false, error: error instanceof Error ? error.message : String(error) });
@@ -220,7 +220,7 @@ async function main() {
 
   server.listen(port, () => {
     console.log(`Age curve MVP running at http://localhost:${port}`);
-    console.log(`Storage: artifacts=${storage.artifactDir} uploads=${storage.uploadDir}`);
+    console.log(`Persistent storage configured: ARTIFACT_DIR=${storage.artifactDir} UPLOAD_DIR=${storage.uploadDir}`);
   });
 }
 

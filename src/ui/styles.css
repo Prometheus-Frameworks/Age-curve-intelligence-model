@@ -7,7 +7,7 @@ body {
 }
 
 main {
-  max-width: 1100px;
+  max-width: 1200px;
   margin: 0 auto;
 }
 
@@ -58,6 +58,18 @@ button {
   font-size: 13px;
 }
 
+.table th[data-sort] {
+  cursor: pointer;
+}
+
+.table-clickable tbody tr {
+  cursor: pointer;
+}
+
+.table-clickable tbody tr:hover {
+  background: #f7faff;
+}
+
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -71,14 +83,44 @@ button {
   padding: 10px;
 }
 
-.badge {
+.badge,
+.chip {
   display: inline-block;
   padding: 2px 8px;
   border-radius: 12px;
-  background: #dde7ff;
   margin-right: 6px;
   margin-bottom: 6px;
   font-size: 12px;
+  border: 1px solid transparent;
+}
+
+.chip-status,
+.chip-stage,
+.chip-bucket {
+  background: #f2f4f8;
+}
+
+.chip-ahead,
+.chip-boost,
+.chip-peak-window {
+  background: #e6f5ea;
+  border-color: #9dd2ac;
+}
+
+.chip-on,
+.chip-neutral,
+.chip-pre-peak,
+.chip-post-peak {
+  background: #edf2ff;
+  border-color: #adc0ff;
+}
+
+.chip-behind,
+.chip-caution,
+.chip-decline-zone,
+.chip-fade {
+  background: #fff1f0;
+  border-color: #f2b7b2;
 }
 
 .error {
@@ -87,6 +129,29 @@ button {
 
 .success {
   color: #146c2e;
+}
+
+.validation-panel {
+  background: #f7f8fa;
+  border: 1px solid #d9dde3;
+  border-radius: 6px;
+  padding: 10px;
+}
+
+.validation-panel.ok {
+  border-color: #a8cfb0;
+}
+
+.validation-panel.warn {
+  border-color: #e2b4ae;
+}
+
+.artifact-tag {
+  display: inline-block;
+  min-width: 120px;
+  font-size: 12px;
+  color: #3f556a;
+  text-transform: lowercase;
 }
 
 #artifact-list li {

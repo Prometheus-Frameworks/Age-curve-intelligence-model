@@ -1,16 +1,17 @@
 # Age-curve-intelligence-model
 
-This repo is a standalone model lab for age-based fantasy football research, now with a thin hostable MVP app layer.
+This repo is a standalone model lab for age-based fantasy football research, with a thin hostable app layer for upload/run/validation/result browsing.
 
-## PR-6 MVP scope
+## PR-7 scope
 
-PR-6 keeps model logic stable and improves hosted usability + deployment reliability:
-- cleaner UI cards/tables instead of raw JSON dumps
-- searchable player discovery by name
-- better loading/success/error/empty states
-- configurable storage paths for artifacts/uploads (Railway-safe)
+PR-7 keeps model logic stable while improving durability + interaction quality:
+- explicit persistent storage behavior for Railway deploys
+- `latest_run_metadata.json` persisted with each run
+- position browsing upgraded to sortable/filterable player tables
+- click-through player detail from position results
+- clearer run/validation/artifact UX for hosted use
 
-No auth, DB, jobs, Tiber integration, or model scope expansion were added.
+No auth, database, background jobs, framework migration, or new analytics/model scope are introduced.
 
 ## Data source
 
@@ -20,7 +21,7 @@ Supported input formats:
 - `.csv`
 - `.json`
 
-## Run the hostable MVP app
+## Run the app
 
 1. Install dependencies:
    ```bash
@@ -39,39 +40,56 @@ npm run start
 
 Then open `http://localhost:3000`.
 
-## Storage configuration (local + Railway)
+## Railway persistence (explicit)
 
-The server uses configurable storage directories:
-- `ARTIFACT_DIR`: where generated artifacts are written/read
-- `UPLOAD_DIR`: where uploaded files are staged
+The server always uses these environment variables for file storage:
+- `ARTIFACT_DIR`
+- `UPLOAD_DIR`
 
-Defaults (when env vars are not set):
+If not set (local dev defaults):
 - `ARTIFACT_DIR=./artifacts`
 - `UPLOAD_DIR=./tmp/uploads`
 
-Directories are created automatically on startup.
+On startup, missing directories are created automatically.
 
-### Railway persistent volume guidance
+### Why mounted storage matters
 
-Railway container local filesystem is **not sufficient for persistent artifacts across restarts/redeploys**. Use a mounted volume path and point both storage env vars there.
+Railway ephemeral container filesystem does not reliably preserve uploaded files and generated artifacts across redeploys/restarts.
 
-Example pattern:
-- Mount a Railway volume at `/data`
-- Set:
-  - `ARTIFACT_DIR=/data/artifacts`
-  - `UPLOAD_DIR=/data/uploads`
+If uploads/artifacts matter after redeploy, mount a persistent volume and point both directories to that mount.
 
-This follows Railway’s common persistence guidance: volumes are the reliable place for files that must survive restart/redeploy cycles.
+### Railway mounted volume example
+
+Mount volume at `/data` and set:
+- `ARTIFACT_DIR=/data/artifacts`
+- `UPLOAD_DIR=/data/uploads`
+
+This keeps uploads and artifacts durable across restart/redeploy cycles.
+
+## Latest run metadata artifact
+
+Each research run writes:
+- `latest_run_metadata.json`
+
+It tracks:
+- last uploaded file name
+- last run timestamp
+- input row count
+- included row count
+- whether validation ran
+- validation pass/fail/total counts (when available)
+
+The summary endpoint/UI uses this metadata so the homepage reflects the latest run state after deployment restarts.
 
 ## Using the app
 
 1. Upload a `.csv` or `.json` export in **Run research**.
-2. Click **Run pipeline** (optional: run validation).
+2. Click **Run pipeline** (optionally run validation).
 3. Review:
-   - **Results overview**: included row count, positions covered, validation counts
-   - **Position browser**: age-curve table, peak windows, top/bottom players, modifier bucket counts
-   - **Player search**: find by name (datalist), then inspect player details, flags, reasons, and modifier
-4. Download artifacts from the **Artifacts** section.
+   - **Results overview**: latest file, last run timestamp, included/input rows, validation summary
+   - **Position browser**: sortable/filterable player research table with status/stage/modifier badges
+   - **Player search**: manual lookup still supported, and row click-through auto-loads details
+4. Download artifacts from the **Artifacts** section (labeled for quick scanning).
 
 ## API routes
 
@@ -110,12 +128,13 @@ Research writes these files into `ARTIFACT_DIR`:
 - `age_trajectory_scores_by_position.json`
 - `tiber_reintegration_player_scores.json`
 - `tiber_age_modifiers.json`
+- `latest_run_metadata.json`
 
 Validation writes:
 - `validation_report.json`
 
 ## Guardrails
 
-- No auth, DB, or background workers in this MVP.
+- No auth, DB, or background workers.
 - App reads generated artifacts for browsing and downloads.
-- Existing model and research logic remain explicit and source-of-truth.
+- Existing model and research logic remain source-of-truth.

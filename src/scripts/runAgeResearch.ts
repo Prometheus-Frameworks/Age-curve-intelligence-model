@@ -29,7 +29,8 @@ async function main() {
     throw new Error("Missing required --input argument.");
   }
 
-  const result = await buildResearchRun(input, outDir);
+  const uploadName = input.split(/[\\/]/).pop() ?? input;
+  const result = await buildResearchRun(input, outDir, uploadName);
   logger.info(`Research completed. Input rows: ${result.inputRows}, included rows: ${result.includedRows}.`);
 }
 

@@ -14,6 +14,7 @@ import {
 } from "../research/ageAnalytics.js";
 import { buildAgeSummaryReport } from "../research/summaries.js";
 import { writeJson } from "../export/writeJson.js";
+import { writeLatestRunMetadata } from "./latestRunMetadata.js";
 
 const RESEARCH_ARTIFACTS = [
   "age_curves_by_position.json",
@@ -24,7 +25,8 @@ const RESEARCH_ARTIFACTS = [
   "player_age_peer_profiles_by_position.json",
   "age_trajectory_scores_by_position.json",
   "tiber_reintegration_player_scores.json",
-  "tiber_age_modifiers.json"
+  "tiber_age_modifiers.json",
+  "latest_run_metadata.json"
 ] as const;
 
 export interface ResearchRunResult {
@@ -44,7 +46,7 @@ async function loadInput(inputPath: string) {
   throw new Error(`Unsupported input format: ${extension}`);
 }
 
-export async function buildResearchRun(inputPath: string, outDir: string): Promise<ResearchRunResult> {
+export async function buildResearchRun(inputPath: string, outDir: string, uploadedFileName: string): Promise<ResearchRunResult> {
   const rawRows = await loadInput(inputPath);
   const normalized = normalizePlayerRows(rawRows);
   const validRows = normalized.filter(validateRow);
@@ -68,6 +70,15 @@ export async function buildResearchRun(inputPath: string, outDir: string): Promi
   await writeJson(outDir, "age_trajectory_scores_by_position.json", trajectoryScores);
   await writeJson(outDir, "tiber_reintegration_player_scores.json", tiberReintegration);
   await writeJson(outDir, "tiber_age_modifiers.json", tiberAgeModifiers);
+  await writeLatestRunMetadata(outDir, {
+    generatedAt: new Date().toISOString(),
+    lastUploadedFileName: uploadedFileName,
+    lastRunTimestamp: new Date().toISOString(),
+    inputRowCount: rawRows.length,
+    includedRowCount: validRows.length,
+    validationRan: false,
+    validationSummary: null
+  });
 
   return {
     inputRows: rawRows.length,
