@@ -21,7 +21,8 @@ section {
 
 h1,
 h2,
-h3 {
+h3,
+h4 {
   margin-top: 0;
 }
 
@@ -56,6 +57,7 @@ button {
   padding: 6px 8px;
   text-align: left;
   font-size: 13px;
+  vertical-align: top;
 }
 
 .table th[data-sort] {
@@ -72,7 +74,7 @@ button {
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
   gap: 10px;
 }
 
@@ -81,6 +83,14 @@ button {
   border: 1px solid #d9dde3;
   border-radius: 6px;
   padding: 10px;
+}
+
+.label {
+  color: #54697d;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 6px;
 }
 
 .badge,
@@ -123,6 +133,12 @@ button {
   border-color: #f2b7b2;
 }
 
+.chip-muted {
+  background: #f3f4f6;
+  border-color: #d9dde3;
+  color: #6f7f90;
+}
+
 .error {
   color: #b00020;
 }
@@ -132,6 +148,7 @@ button {
 }
 
 .validation-panel {
+  margin-top: 12px;
   background: #f7f8fa;
   border: 1px solid #d9dde3;
   border-radius: 6px;
@@ -144,6 +161,44 @@ button {
 
 .validation-panel.warn {
   border-color: #e2b4ae;
+}
+
+.validation-status {
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.validation-stats {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.player-header {
+  margin-bottom: 10px;
+}
+
+.subtle,
+.muted {
+  color: #5a6d80;
+  font-size: 13px;
+}
+
+.filters-row {
+  margin-bottom: 6px;
+}
+
+pre {
+  background: #f6f8fa;
+  border: 1px solid #d9dde3;
+  border-radius: 6px;
+  padding: 10px;
+  overflow: auto;
+  max-height: 260px;
+}
+
+.artifacts-section {
+  opacity: 0.82;
 }
 
 .artifact-tag {

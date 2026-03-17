@@ -134,7 +134,8 @@ export async function buildPositionSummary(artifactDir: string, position: Positi
       ageTrajectoryScore: row.ageTrajectoryScore,
       ageCurveStatus: row.ageCurveStatus,
       ageBandStage: row.ageBandStage,
-      recommendedModifierBucket: modifier?.recommendedModifierBucket ?? "neutral"
+      recommendedModifierBucket: modifier?.recommendedModifierBucket ?? "neutral",
+      overallReasonSummary: row.overallReasonSummary
     };
   });
 
