@@ -6,6 +6,11 @@ export interface AgePoint {
   seasonCount: number;
   avgFantasyPointsTotal: number | null;
   avgFantasyPointsPerGame: number | null;
+  smoothedAvgFantasyPointsTotal: number | null;
+  smoothedAvgFantasyPointsPerGame: number | null;
+  smoothingSampleSize: number;
+  smoothingRadius: number;
+  lowSampleWarning: boolean;
 }
 
 export interface AgeCurveByPosition {
@@ -61,12 +66,21 @@ export interface PositionPeakMetric {
 
 export type AgePeakWindowsByPosition = Record<Position, PositionPeakMetric[]>;
 
+export type PeerSampleConfidence = "low" | "medium" | "high";
+
+export interface PeerSampleMetadata {
+  peerSampleSize: number;
+  minPeerSampleRequired: number;
+  confidenceTier: PeerSampleConfidence;
+  isReliableSample: boolean;
+  reliabilityGap: number;
+}
+
 export interface AgePeerMetricPercentile {
   metric: MetricKey;
   value: number;
-  peerSampleSize: number;
-  minPeerSampleRequired: number;
   percentile: number | null;
+  peerSample: PeerSampleMetadata;
 }
 
 export interface PositionPlayerAgePeerProfile {
@@ -83,10 +97,21 @@ export type PlayerAgePeerProfileByPosition = Record<Position, PositionPlayerAgeP
 export interface ScoreComponent {
   metric: MetricKey;
   value: number;
-  peerSampleSize: number;
   percentile: number;
   weight: number;
   weightedContribution: number;
+  peerSample: PeerSampleMetadata;
+}
+
+export type AgeCurveRelativeStatus = "ahead" | "on" | "behind";
+
+export type AgeBandStage = "pre-peak" | "peak-window" | "post-peak" | "decline-zone";
+
+export interface RuleFlag {
+  code: string;
+  label: string;
+  message: string;
+  severity: "info" | "warning";
 }
 
 export interface PositionAgeTrajectoryScore {
@@ -98,7 +123,33 @@ export interface PositionAgeTrajectoryScore {
   componentCount: number;
   totalWeight: number;
   ageTrajectoryScore: number | null;
+  ageCurveDelta: number | null;
+  ageCurveStatus: AgeCurveRelativeStatus | null;
+  ageBandStage: AgeBandStage;
+  flags: RuleFlag[];
+  interpretation: string;
   components: ScoreComponent[];
 }
 
 export type AgeTrajectoryScoresByPosition = Record<Position, PositionAgeTrajectoryScore[]>;
+
+export interface TiberReintegrationRow {
+  playerId: string;
+  playerName: string;
+  season: number;
+  age: number;
+  position: Position;
+  ageTrajectoryScore: number | null;
+  ageCurveStatus: AgeCurveRelativeStatus | null;
+  ageCurveDelta: number | null;
+  ageBandStage: AgeBandStage;
+  interpretation: string;
+  flagCodes: string[];
+  hasWarningFlag: boolean;
+  componentCount: number;
+}
+
+export interface TiberReintegrationArtifact {
+  generatedAt: string;
+  rows: TiberReintegrationRow[];
+}

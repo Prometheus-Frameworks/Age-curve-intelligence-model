@@ -5,9 +5,21 @@ import { bucketRowsByAge } from "./ageBuckets.js";
 import type { NormalizedPlayerSeasonRow } from "../types/normalized.js";
 import type { AgeCurveByPosition, AgePoint, AgeMetricAveragesByPosition, MetricAverageByAge } from "../types/research.js";
 import { METRICS_BY_POSITION } from "../config/metrics.js";
+import { AGE_CURVE_SMOOTHING_RADIUS, MIN_PEER_SAMPLE } from "../config/thresholds.js";
 
 function sortByAge<T extends { age: number }>(items: T[]): T[] {
   return [...items].sort((a, b) => a.age - b.age);
+}
+
+function calculateSmoothedAgePoint(age: number, points: AgePoint[]): Pick<AgePoint, "smoothedAvgFantasyPointsPerGame" | "smoothedAvgFantasyPointsTotal" | "smoothingSampleSize"> {
+  const inWindow = points.filter((point) => Math.abs(point.age - age) <= AGE_CURVE_SMOOTHING_RADIUS);
+  const smoothingSampleSize = inWindow.reduce((sum, point) => sum + point.seasonCount, 0);
+
+  return {
+    smoothedAvgFantasyPointsPerGame: average(inWindow.map((point) => point.avgFantasyPointsPerGame)),
+    smoothedAvgFantasyPointsTotal: average(inWindow.map((point) => point.avgFantasyPointsTotal)),
+    smoothingSampleSize
+  };
 }
 
 export function buildAgeCurvesByPosition(rows: NormalizedPlayerSeasonRow[]): AgeCurveByPosition {
@@ -18,12 +30,25 @@ export function buildAgeCurvesByPosition(rows: NormalizedPlayerSeasonRow[]): Age
     const positionRows = byPosition.get(position) ?? [];
     const byAge = bucketRowsByAge(positionRows);
 
-    const points: AgePoint[] = Array.from(byAge.entries()).map(([age, ageRows]) => ({
+    const rawPoints: AgePoint[] = Array.from(byAge.entries()).map(([age, ageRows]) => ({
       age,
       seasonCount: ageRows.length,
       avgFantasyPointsTotal: average(ageRows.map((row) => row.fantasyPointsTotal)),
-      avgFantasyPointsPerGame: average(ageRows.map((row) => row.fantasyPointsPerGame))
+      avgFantasyPointsPerGame: average(ageRows.map((row) => row.fantasyPointsPerGame)),
+      smoothedAvgFantasyPointsTotal: null,
+      smoothedAvgFantasyPointsPerGame: null,
+      smoothingSampleSize: 0,
+      smoothingRadius: AGE_CURVE_SMOOTHING_RADIUS,
+      lowSampleWarning: ageRows.length < MIN_PEER_SAMPLE
     }));
+
+    const points = rawPoints.map((point) => {
+      const smoothed = calculateSmoothedAgePoint(point.age, rawPoints);
+      return {
+        ...point,
+        ...smoothed
+      };
+    });
 
     result[position] = sortByAge(points);
   }
