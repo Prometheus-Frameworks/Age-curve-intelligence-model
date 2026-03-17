@@ -9,6 +9,7 @@ import {
   buildAgeTrajectoryScoresByPosition,
   buildPeakWindowsByPosition,
   buildPlayerAgePeerProfilesByPosition,
+  buildTiberAgeModifierArtifact,
   buildTiberReintegrationArtifact
 } from "../research/ageAnalytics.js";
 import { buildAgeSummaryReport } from "../research/summaries.js";
@@ -66,6 +67,7 @@ async function main() {
   const playerAgeProfiles = buildPlayerAgePeerProfilesByPosition(validRows);
   const trajectoryScores = buildAgeTrajectoryScoresByPosition(validRows, ageCurves, peakWindows);
   const tiberReintegration = buildTiberReintegrationArtifact(trajectoryScores);
+  const tiberAgeModifiers = buildTiberAgeModifierArtifact(trajectoryScores);
 
   await writeJson(outDir, "age_curves_by_position.json", ageCurves);
   await writeJson(outDir, "age_metric_averages_by_position.json", metricAverages);
@@ -75,6 +77,7 @@ async function main() {
   await writeJson(outDir, "player_age_peer_profiles_by_position.json", playerAgeProfiles);
   await writeJson(outDir, "age_trajectory_scores_by_position.json", trajectoryScores);
   await writeJson(outDir, "tiber_reintegration_player_scores.json", tiberReintegration);
+  await writeJson(outDir, "tiber_age_modifiers.json", tiberAgeModifiers);
 
   logger.info(`Research completed. Input rows: ${rawRows.length}, included rows: ${validRows.length}.`);
 }

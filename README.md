@@ -2,18 +2,17 @@
 
 This repo is a standalone model lab for age-based fantasy football research.
 
-## Current scope (PR-3)
+## Current scope (PR-4)
 
-PR-3 expands the script-driven research outputs to include:
-- age-curve smoothing over neighboring ages to reduce noisy single-age spikes
-- peer sample confidence metadata attached to every age-peer metric comparison
-- plain-English age-curve status (`ahead`, `on`, `behind`) for each player season
-- age-band stage classification (`pre-peak`, `peak-window`, `post-peak`, `decline-zone`)
-- rule-based anomaly and context flags tied to smoothed baselines and sample reliability
-- clean reintegration artifact export for Tiber with player-level scores and flags
-- all outputs remain position-specific and fully interpretable (no black-box predictions)
+PR-4 improves calibration, trust, and downstream usability with:
+- position-specific age-curve status/anomaly thresholds for QB/RB/WR/TE
+- position-aware age-band stage classification using peak-window evidence with per-position fallback ages
+- deterministic reason summaries (`productionReason`, `roleReason`, `efficiencyReason`, `overallReasonSummary`)
+- a curated validation pack with archetype expectations and mismatch diagnostics
+- a slim Tiber modifier artifact for conservative downstream scoring adjustments
+- all outputs remain explicit, interpretable, and script-driven (no black-box prediction)
 
-There is no API or frontend yet.
+There is no API or frontend.
 
 ## Data source
 
@@ -36,9 +35,18 @@ Supported input formats:
    Optional flags:
    - `--outDir ./artifacts` (default `./artifacts`)
 
+## Run validation pack
+
+```bash
+npm run validation:run
+```
+
+Writes:
+- `validation_report.json`
+
 ## Artifacts
 
-The script writes these files into `/artifacts`:
+The research script writes these files into `/artifacts`:
 - `age_curves_by_position.json`
 - `age_metric_averages_by_position.json`
 - `age_summary_report.json`
@@ -47,6 +55,7 @@ The script writes these files into `/artifacts`:
 - `player_age_peer_profiles_by_position.json`
 - `age_trajectory_scores_by_position.json`
 - `tiber_reintegration_player_scores.json`
+- `tiber_age_modifiers.json`
 
 ## Inclusion logic
 
@@ -56,11 +65,10 @@ Rows are included when:
 - `games >= 4`
 - either `fantasyPointsPerGame` or `fantasyPointsTotal` exists
 
-## Guardrails baked into PR-3
+## Guardrails
 
 - All analytics are computed within each position only.
 - Peer percentiles only use same-position, same-age peers.
 - Minimum sample checks are enforced and low-sample conditions are surfaced as warnings (not hidden).
-- Smoothed age baselines use local neighboring ages to avoid overfitting single-age spikes.
-- All flags are deterministic and rule-based (interpretable by design).
-- AgeTrajectoryScore remains modular and traceable: each score includes component metrics, weights, weighted contributions, and peer confidence metadata.
+- Rules are deterministic and modular; no model training or hidden weighting.
+- Modifier export is bounded and conservative (`boost`, `neutral`, `caution`, `fade`) for downstream adjustments.

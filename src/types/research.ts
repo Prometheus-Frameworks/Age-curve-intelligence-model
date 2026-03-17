@@ -107,6 +107,12 @@ export type AgeCurveRelativeStatus = "ahead" | "on" | "behind";
 
 export type AgeBandStage = "pre-peak" | "peak-window" | "post-peak" | "decline-zone";
 
+export interface CurveStatusThresholds {
+  ahead: number;
+  behind: number;
+  anomaly: number;
+}
+
 export interface RuleFlag {
   code: string;
   label: string;
@@ -127,6 +133,10 @@ export interface PositionAgeTrajectoryScore {
   ageCurveStatus: AgeCurveRelativeStatus | null;
   ageBandStage: AgeBandStage;
   flags: RuleFlag[];
+  productionReason: string;
+  roleReason: string;
+  efficiencyReason: string;
+  overallReasonSummary: string;
   interpretation: string;
   components: ScoreComponent[];
 }
@@ -144,6 +154,10 @@ export interface TiberReintegrationRow {
   ageCurveDelta: number | null;
   ageBandStage: AgeBandStage;
   interpretation: string;
+  productionReason: string;
+  roleReason: string;
+  efficiencyReason: string;
+  overallReasonSummary: string;
   flagCodes: string[];
   hasWarningFlag: boolean;
   componentCount: number;
@@ -152,4 +166,64 @@ export interface TiberReintegrationRow {
 export interface TiberReintegrationArtifact {
   generatedAt: string;
   rows: TiberReintegrationRow[];
+}
+
+export type ModifierBucket = "boost" | "neutral" | "caution" | "fade";
+
+export interface TiberAgeModifierRow {
+  playerId: string;
+  season: number;
+  age: number;
+  position: Position;
+  ageTrajectoryScore: number | null;
+  ageCurveStatus: AgeCurveRelativeStatus | null;
+  ageCurveDelta: number | null;
+  ageBandStage: AgeBandStage;
+  hasWarningFlag: boolean;
+  flagCodes: string[];
+  recommendedModifierBucket: ModifierBucket;
+  modifierMagnitude: number;
+}
+
+export interface TiberAgeModifierArtifact {
+  generatedAt: string;
+  rows: TiberAgeModifierRow[];
+}
+
+export interface ValidationCaseExpectation {
+  expectedAgeCurveStatus?: AgeCurveRelativeStatus | null;
+  expectedAgeBandStage?: AgeBandStage;
+  expectWarningFlag?: boolean;
+  expectedFlagCodes?: string[];
+  expectedThemes?: string[];
+}
+
+export interface ValidationCase {
+  caseName: string;
+  description: string;
+  playerId: string;
+  playerName: string;
+  expectation: ValidationCaseExpectation;
+}
+
+export interface ValidationCaseResult {
+  caseName: string;
+  pass: boolean;
+  expected: ValidationCaseExpectation;
+  actual: {
+    ageCurveStatus: AgeCurveRelativeStatus | null;
+    ageBandStage: AgeBandStage;
+    hasWarningFlag: boolean;
+    flagCodes: string[];
+    overallReasonSummary: string;
+  };
+  mismatchExplanations: string[];
+}
+
+export interface ValidationReport {
+  generatedAt: string;
+  totalCases: number;
+  passedCases: number;
+  failedCases: number;
+  results: ValidationCaseResult[];
 }
