@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Age Curve MVP</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main>
+      <h1>Age Curve Research MVP</h1>
+
+      <section>
+        <h2>Run research</h2>
+        <form id="run-form">
+          <input id="input-file" type="file" accept=".csv,.json" required />
+          <label><input id="run-validation" type="checkbox" /> Run validation after research</label>
+          <button type="submit">Run pipeline</button>
+        </form>
+        <pre id="run-status">No run yet.</pre>
+      </section>
+
+      <section>
+        <h2>Results overview</h2>
+        <button id="refresh-summary">Refresh summary</button>
+        <pre id="summary">No summary loaded.</pre>
+      </section>
+
+      <section>
+        <h2>Position browser</h2>
+        <select id="position-select">
+          <option>QB</option>
+          <option>RB</option>
+          <option>WR</option>
+          <option>TE</option>
+        </select>
+        <button id="load-position">Load position</button>
+        <pre id="position-results">No position loaded.</pre>
+      </section>
+
+      <section>
+        <h2>Player search</h2>
+        <form id="player-form">
+          <input id="player-id" placeholder="playerId" required />
+          <input id="player-season" placeholder="season (optional)" />
+          <button type="submit">Lookup</button>
+        </form>
+        <pre id="player-results">No player loaded.</pre>
+      </section>
+
+      <section>
+        <h2>Artifacts</h2>
+        <button id="refresh-artifacts">Refresh artifacts</button>
+        <ul id="artifact-list"></ul>
+      </section>
+    </main>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

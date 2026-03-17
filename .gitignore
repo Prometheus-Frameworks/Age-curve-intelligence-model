@@ -3,3 +3,5 @@ dist/
 artifacts/*.json
 artifacts/*.csv
 .DS_Store
+
+tmp/

@@ -1,19 +1,4 @@
-import { extname } from "node:path";
-import { loadCsv } from "../loaders/loadCsv.js";
-import { loadJson } from "../loaders/loadJson.js";
-import { normalizePlayerRows } from "../normalizers/normalizePlayerRows.js";
-import { validateRow } from "../normalizers/validateRow.js";
-import { buildAgeCurvesByPosition, buildAgeMetricAveragesByPosition } from "../research/ageCurves.js";
-import {
-  buildAgeCorrelationsByPosition,
-  buildAgeTrajectoryScoresByPosition,
-  buildPeakWindowsByPosition,
-  buildPlayerAgePeerProfilesByPosition,
-  buildTiberAgeModifierArtifact,
-  buildTiberReintegrationArtifact
-} from "../research/ageAnalytics.js";
-import { buildAgeSummaryReport } from "../research/summaries.js";
-import { writeJson } from "../export/writeJson.js";
+import { buildResearchRun } from "../app/buildResearchRun.js";
 import { logger } from "../utils/logger.js";
 
 interface CliArgs {
@@ -37,17 +22,6 @@ function parseArgs(argv: string[]): CliArgs {
   return args;
 }
 
-async function loadInput(inputPath: string) {
-  const extension = extname(inputPath).toLowerCase();
-  if (extension === ".json") {
-    return loadJson(inputPath);
-  }
-  if (extension === ".csv") {
-    return loadCsv(inputPath);
-  }
-  throw new Error(`Unsupported input format: ${extension}`);
-}
-
 async function main() {
   const { input, outDir } = parseArgs(process.argv.slice(2));
 
@@ -55,31 +29,8 @@ async function main() {
     throw new Error("Missing required --input argument.");
   }
 
-  const rawRows = await loadInput(input);
-  const normalized = normalizePlayerRows(rawRows);
-  const validRows = normalized.filter(validateRow);
-
-  const ageCurves = buildAgeCurvesByPosition(validRows);
-  const metricAverages = buildAgeMetricAveragesByPosition(validRows);
-  const summary = buildAgeSummaryReport(validRows);
-  const correlations = buildAgeCorrelationsByPosition(validRows);
-  const peakWindows = buildPeakWindowsByPosition(validRows);
-  const playerAgeProfiles = buildPlayerAgePeerProfilesByPosition(validRows);
-  const trajectoryScores = buildAgeTrajectoryScoresByPosition(validRows, ageCurves, peakWindows);
-  const tiberReintegration = buildTiberReintegrationArtifact(trajectoryScores);
-  const tiberAgeModifiers = buildTiberAgeModifierArtifact(trajectoryScores);
-
-  await writeJson(outDir, "age_curves_by_position.json", ageCurves);
-  await writeJson(outDir, "age_metric_averages_by_position.json", metricAverages);
-  await writeJson(outDir, "age_summary_report.json", summary);
-  await writeJson(outDir, "age_correlations_by_position.json", correlations);
-  await writeJson(outDir, "age_peak_windows_by_position.json", peakWindows);
-  await writeJson(outDir, "player_age_peer_profiles_by_position.json", playerAgeProfiles);
-  await writeJson(outDir, "age_trajectory_scores_by_position.json", trajectoryScores);
-  await writeJson(outDir, "tiber_reintegration_player_scores.json", tiberReintegration);
-  await writeJson(outDir, "tiber_age_modifiers.json", tiberAgeModifiers);
-
-  logger.info(`Research completed. Input rows: ${rawRows.length}, included rows: ${validRows.length}.`);
+  const result = await buildResearchRun(input, outDir);
+  logger.info(`Research completed. Input rows: ${result.inputRows}, included rows: ${result.includedRows}.`);
 }
 
 main().catch((error) => {
