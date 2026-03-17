@@ -1,0 +1,14 @@
+{
+  "name": "age-curve-intelligence-model",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p .",
+    "typecheck": "tsc -p . --noEmit",
+    "research:run": "tsx src/scripts/runAgeResearch.ts"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  }
+}
