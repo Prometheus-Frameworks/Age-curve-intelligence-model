@@ -3,8 +3,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc -p .",
-    "typecheck": "tsc -p . --noEmit",
+    "build": "npm run build:client && npm run build:server",
+    "build:client": "node scripts/build-client.mjs",
+    "build:server": "tsc -p tsconfig.server.json",
+    "typecheck": "tsc -p tsconfig.server.json --noEmit",
     "research:run": "tsx src/scripts/runAgeResearch.ts",
     "validation:run": "tsx src/scripts/runValidation.ts",
     "dev": "tsx watch src/server/index.ts",
@@ -15,7 +17,8 @@
     "tsx": "^4.19.2",
     "typescript": "^5.7.3",
     "@types/react": "^18.3.12",
-    "@types/react-dom": "^18.3.1"
+    "@types/react-dom": "^18.3.1",
+    "esbuild": "^0.27.4"
   },
   "dependencies": {
     "react": "^18.3.1",

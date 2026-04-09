@@ -1,0 +1,22 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "outDir": "dist",
+    "rootDir": "src"
+  },
+  "include": [
+    "src"
+  ],
+  "exclude": [
+    "src/components/**/*",
+    "src/pages/**/*",
+    "src/hooks/usePipeline.ts",
+    "src/types/index.ts",
+    "src/ui/**/*",
+    "src/main.tsx",
+    "src/App.tsx",
+    "src/styles.css"
+  ]
+}
