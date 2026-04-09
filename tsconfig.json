@@ -9,7 +9,16 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "outDir": "dist",
-    "rootDir": "src"
+    "rootDir": "src",
+    "jsx": "react-jsx"
   },
-  "include": ["src"]
+  "include": [
+    "src"
+  ],
+  "exclude": [
+    "src/components/**/*",
+    "src/pages/**/*",
+    "src/hooks/usePipeline.ts",
+    "src/types/index.ts"
+  ]
 }
