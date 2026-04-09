@@ -3,8 +3,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc -p .",
-    "typecheck": "tsc -p . --noEmit",
+    "build": "npm run build:client && npm run build:server",
+    "build:client": "node scripts/build-client.mjs",
+    "build:server": "tsc -p tsconfig.server.json",
+    "typecheck": "tsc -p tsconfig.server.json --noEmit",
     "research:run": "tsx src/scripts/runAgeResearch.ts",
     "validation:run": "tsx src/scripts/runValidation.ts",
     "dev": "tsx watch src/server/index.ts",

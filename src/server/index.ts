@@ -10,7 +10,6 @@ import { ensureStorageDirs } from "../config/storage.js";
 
 const port = Number(process.env.PORT ?? "3000");
 const builtUiDir = join(process.cwd(), "dist", "ui");
-const sourceUiDir = join(process.cwd(), "src", "ui");
 
 interface StoragePaths {
   artifactDir: string;
@@ -175,35 +174,39 @@ async function handleApi(
   sendJson(res, 404, { error: "Not found" });
 }
 
+function contentType(pathname: string) {
+  if (pathname.endsWith(".css")) return "text/css";
+  if (pathname.endsWith(".js")) return "text/javascript";
+  if (pathname.endsWith(".json")) return "application/json";
+  if (pathname.endsWith(".svg")) return "image/svg+xml";
+  if (pathname.endsWith(".png")) return "image/png";
+  if (pathname.endsWith(".jpg") || pathname.endsWith(".jpeg")) return "image/jpeg";
+  if (pathname.endsWith(".woff")) return "font/woff";
+  if (pathname.endsWith(".woff2")) return "font/woff2";
+  return "text/html";
+}
+
 async function handleUi(pathname: string, res: ServerResponse) {
-  const target = pathname === "/" ? "/index.html" : pathname;
-  const dirs = [builtUiDir, sourceUiDir];
+  const target = pathname === "/" ? "index.html" : pathname.replace(/^\//, "");
 
-  for (const dir of dirs) {
-    try {
-      const content = await readFile(join(dir, target));
-      const type = target.endsWith(".css") ? "text/css" : target.endsWith(".js") || target.endsWith(".ts") ? "text/javascript" : "text/html";
-      res.writeHead(200, { "Content-Type": type });
-      res.end(content);
-      return;
-    } catch {
-      // try next dir
-    }
+  try {
+    const content = await readFile(join(builtUiDir, target));
+    res.writeHead(200, { "Content-Type": contentType(target) });
+    res.end(content);
+    return;
+  } catch {
+    // fall through to SPA index fallback
   }
 
-  for (const dir of dirs) {
-    try {
-      const indexHtml = await readFile(join(dir, "index.html"));
-      res.writeHead(200, { "Content-Type": "text/html" });
-      res.end(indexHtml);
-      return;
-    } catch {
-      // keep trying
-    }
+  try {
+    const indexHtml = await readFile(join(builtUiDir, "index.html"));
+    res.writeHead(200, { "Content-Type": "text/html" });
+    res.end(indexHtml);
+    return;
+  } catch {
+    res.writeHead(404, { "Content-Type": "text/plain" });
+    res.end("UI not built yet. Run npm run build.");
   }
-
-  res.writeHead(404, { "Content-Type": "text/plain" });
-  res.end("UI not built yet. Run npm run build or use src/ui files.");
 }
 
 async function main() {
