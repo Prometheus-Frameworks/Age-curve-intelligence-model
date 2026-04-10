@@ -13,6 +13,7 @@ import {
   buildTiberReintegrationArtifact
 } from "../research/ageAnalytics.js";
 import { buildAgeSummaryReport } from "../research/summaries.js";
+import { buildTiberAgeContextArtifact } from "../research/ageContext.js";
 import { writeJson } from "../export/writeJson.js";
 import { writeLatestRunMetadata } from "./latestRunMetadata.js";
 
@@ -26,6 +27,7 @@ const RESEARCH_ARTIFACTS = [
   "age_trajectory_scores_by_position.json",
   "tiber_reintegration_player_scores.json",
   "tiber_age_modifiers.json",
+  "tiber_age_context_v1.json",
   "latest_run_metadata.json"
 ] as const;
 
@@ -60,6 +62,7 @@ export async function buildResearchRun(inputPath: string, outDir: string, upload
   const trajectoryScores = buildAgeTrajectoryScoresByPosition(validRows, ageCurves, peakWindows);
   const tiberReintegration = buildTiberReintegrationArtifact(trajectoryScores);
   const tiberAgeModifiers = buildTiberAgeModifierArtifact(trajectoryScores);
+  const tiberAgeContext = buildTiberAgeContextArtifact(trajectoryScores);
 
   await writeJson(outDir, "age_curves_by_position.json", ageCurves);
   await writeJson(outDir, "age_metric_averages_by_position.json", metricAverages);
@@ -70,6 +73,7 @@ export async function buildResearchRun(inputPath: string, outDir: string, upload
   await writeJson(outDir, "age_trajectory_scores_by_position.json", trajectoryScores);
   await writeJson(outDir, "tiber_reintegration_player_scores.json", tiberReintegration);
   await writeJson(outDir, "tiber_age_modifiers.json", tiberAgeModifiers);
+  await writeJson(outDir, "tiber_age_context_v1.json", tiberAgeContext);
   await writeLatestRunMetadata(outDir, {
     generatedAt: new Date().toISOString(),
     lastUploadedFileName: uploadedFileName,
