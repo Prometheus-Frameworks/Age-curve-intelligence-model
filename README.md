@@ -1,17 +1,47 @@
 # Age-curve-intelligence-model
 
-This repo is a standalone model lab for age-based fantasy football research, with a thin hostable app layer for upload/run/validation/result browsing.
+This repo is the **TIBER Age Context v1** module: an age-context-only producer with a hostable app layer for upload/run/validation/result browsing.
 
 ## PR-7 scope
 
 PR-7 keeps model logic stable while improving durability + interaction quality:
 - explicit persistent storage behavior for Railway deploys
-- `latest_run_metadata.json` persisted with each run
+- `latest_run_metadata.json`
+- `tiber_age_context_v1.json` persisted with each run
 - position browsing upgraded to sortable/filterable player tables
 - click-through player detail from position results
 - clearer run/validation/artifact UX for hosted use
 
 No auth, database, background jobs, framework migration, or new analytics/model scope are introduced.
+
+
+## TIBER Age Context v1 scope
+
+This module owns:
+- career stage classification
+- relative age-curve status
+- warning/context flags
+- provisional modifier recommendation metadata
+- deterministic explanation/summary fields
+- canonical downstream export `tiber_age_context_v1.json`
+
+This module does **not** own:
+- standalone rankings
+- projections
+- standalone player valuation
+- standalone trade recommendations
+
+Semantic lock:
+- `careerStage` is lifecycle phase only (e.g., pre/peak/post/decline).
+- `ageCurveStatus` is relative-to-expectation only (ahead/on-curve/behind).
+- These fields are orthogonal and intentionally separated to prevent drift.
+
+Guardrails:
+- `rankAdjustmentPolicy` is limited to `none | display_only | dynasty_only` in PR1.
+- `modifierMagnitude` is explicitly provisional and non-authoritative.
+- `modifierIsProvisional` is always `true` in the canonical export.
+- `full_context` is intentionally not emitted in PR1.
+- player `summary` is deterministic and template-based (no LLM freeform generation).
 
 ## Data source
 
@@ -70,6 +100,7 @@ This keeps uploads and artifacts durable across restart/redeploy cycles.
 
 Each research run writes:
 - `latest_run_metadata.json`
+- `tiber_age_context_v1.json`
 
 It tracks:
 - last uploaded file name
@@ -129,6 +160,7 @@ Research writes these files into `ARTIFACT_DIR`:
 - `tiber_reintegration_player_scores.json`
 - `tiber_age_modifiers.json`
 - `latest_run_metadata.json`
+- `tiber_age_context_v1.json`
 
 Validation writes:
 - `validation_report.json`
