@@ -138,7 +138,8 @@ function toPlayer(score: PositionAgeTrajectoryScore, generatedAt: string): Tiber
     careerStage: toCareerStage(score.ageBandStage),
     ageCurveStatus: toAgeCurveStatus(score.ageCurveStatus),
     ageCurveDelta: score.ageCurveDelta,
-    peerPercentile: Number.isFinite(score.ageTrajectoryScore) ? score.ageTrajectoryScore : null,
+    // PR13 contract integrity: do not present non-percentile scores as percentiles.
+    peerPercentile: null,
     reliabilityTier,
     hasWarningFlag: score.flags.some((flag) => flag.severity === "warning"),
     warningFlags: score.flags.map((flag) => flag.code),
