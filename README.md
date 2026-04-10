@@ -38,7 +38,9 @@ Semantic lock:
 
 Guardrails:
 - `rankAdjustmentPolicy` is limited to `none | display_only | dynasty_only` in PR1.
-- `modifierMagnitude` is explicitly provisional and non-authoritative.
+- low/unknown reliability cannot emit `dynasty_only`; such rows are downgraded to `display_only`/`none`.
+- canonical per-player guardrail fields include `peerPercentile`, `suppressReasons`, `scoringEligible`, and `displayOnly`.
+- `modifierMagnitude` is explicitly provisional and non-authoritative (and may be `null` for suppressed/display-only contexts).
 - `modifierIsProvisional` is always `true` in the canonical export.
 - `full_context` is intentionally not emitted in PR1.
 - player `summary` is deterministic and template-based (no LLM freeform generation).

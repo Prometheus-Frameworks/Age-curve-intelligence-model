@@ -42,16 +42,20 @@ export interface TiberAgeContextPlayer {
   careerStage: CareerStage;
   ageCurveStatus: AgeCurveStatus;
   ageCurveDelta: number | null;
+  peerPercentile: number | null;
 
   reliabilityTier: ReliabilityTier;
   hasWarningFlag: boolean;
   warningFlags: string[];
+  suppressReasons: string[];
+  scoringEligible: boolean;
+  displayOnly: boolean;
   suppressFromRanking: boolean;
 
   rankAdjustmentPolicy: RankAdjustmentPolicy;
 
   recommendedModifierBucket: "boost" | "neutral" | "caution" | "fade";
-  modifierMagnitude: number;
+  modifierMagnitude: number | null;
   modifierIsProvisional: true;
   modifierNonAuthoritativeReason: string;
 
@@ -62,10 +66,16 @@ export interface TiberAgeContextPlayer {
 export interface TiberAgeContextArtifact {
   artifactVersion: typeof TIBER_AGE_CONTEXT_ARTIFACT_VERSION;
   modelVersion: typeof TIBER_AGE_CONTEXT_MODEL_VERSION;
+  calibrationVersion: string;
+  modifierStatus: "provisional_non_authoritative";
   generatedAt: string;
   scope: "age_context_only";
   provenance: {
     module: "Age-curve-intelligence-model";
+    ownership: {
+      owns: string[];
+      doesNotOwn: string[];
+    };
     notes: string[];
   };
   players: TiberAgeContextPlayer[];

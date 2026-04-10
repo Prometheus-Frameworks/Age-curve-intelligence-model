@@ -14,10 +14,7 @@ import type {
   TiberAgeContextArtifact,
   TiberAgeContextPlayer
 } from "../types/ageContext.js";
-import {
-  TIBER_AGE_CONTEXT_ARTIFACT_VERSION,
-  TIBER_AGE_CONTEXT_MODEL_VERSION
-} from "../types/ageContext.js";
+import { TIBER_AGE_CONTEXT_ARTIFACT_VERSION, TIBER_AGE_CONTEXT_MODEL_VERSION } from "../types/ageContext.js";
 
 function toCareerStage(stage: AgeBandStage): CareerStage {
   if (stage === "pre-peak") return "pre_peak";
@@ -47,24 +44,55 @@ function toReliabilityTier(score: PositionAgeTrajectoryScore): ReliabilityTier {
   return "unknown";
 }
 
-function determinePolicy(score: PositionAgeTrajectoryScore, reliability: ReliabilityTier): RankAdjustmentPolicy {
-  const hasWarningFlag = score.flags.some((flag) => flag.severity === "warning");
-  if (reliability === "unknown" || hasWarningFlag) {
+function buildSuppressReasons(score: PositionAgeTrajectoryScore, reliability: ReliabilityTier): string[] {
+  const reasons: string[] = [];
+  const warningFlags = score.flags.filter((flag) => flag.severity === "warning");
+
+  if (reliability === "unknown") {
+    reasons.push("unknown_reliability");
+  } else if (reliability === "low") {
+    reasons.push("low_reliability");
+  }
+
+  if (warningFlags.length >= 2) {
+    reasons.push("warning_burden");
+  }
+
+  if (warningFlags.some((flag) => flag.code === "insufficient_component_data")) {
+    reasons.push("insufficient_component_data");
+  }
+
+  if (score.ageCurveStatus === null) {
+    reasons.push("unknown_age_curve_status");
+  }
+
+  return reasons;
+}
+
+function determinePolicy(score: PositionAgeTrajectoryScore, reliability: ReliabilityTier, suppressReasons: string[]): RankAdjustmentPolicy {
+  const warningCount = score.flags.filter((flag) => flag.severity === "warning").length;
+
+  if (reliability === "unknown" || warningCount >= 2 || suppressReasons.includes("insufficient_component_data")) {
     return "none";
   }
+
+  if (reliability === "low") {
+    return "display_only";
+  }
+
   if (score.ageCurveStatus === "ahead" && score.ageBandStage !== "decline-zone") {
     return "dynasty_only";
   }
-  if (score.ageCurveStatus === "behind" || reliability === "low") {
-    return "display_only";
-  }
+
   return "display_only";
 }
 
-function determineModifier(score: PositionAgeTrajectoryScore): { bucket: ModifierBucket; magnitude: number } {
-  const hasWarningFlag = score.flags.some((flag) => flag.severity === "warning");
-  if (hasWarningFlag || score.componentCount < 2 || score.ageCurveStatus === null) {
-    return { bucket: "neutral", magnitude: 0 };
+function determineModifier(
+  score: PositionAgeTrajectoryScore,
+  rankAdjustmentPolicy: RankAdjustmentPolicy
+): { bucket: ModifierBucket; magnitude: number | null } {
+  if (rankAdjustmentPolicy !== "dynasty_only") {
+    return { bucket: "neutral", magnitude: null };
   }
 
   if (score.ageBandStage === "decline-zone" && score.ageCurveStatus === "behind") {
@@ -83,19 +111,23 @@ function determineModifier(score: PositionAgeTrajectoryScore): { bucket: Modifie
 }
 
 function buildSummary(player: TiberAgeContextPlayer): string {
-  return [
-    `Age context: ${player.careerStage} lifecycle stage`,
-    `status ${player.ageCurveStatus}`,
-    `reliability ${player.reliabilityTier}`,
-    `policy ${player.rankAdjustmentPolicy}`,
-    player.hasWarningFlag ? "warnings present" : "no warnings"
-  ].join("; ");
+  const roleClause = player.displayOnly ? "display-only context" : player.scoringEligible ? "scoring-eligible context" : "suppressed context";
+  const reasonClause = player.suppressReasons.length > 0 ? ` due to ${player.suppressReasons.join(", ")}` : "";
+
+  return `${player.age.toFixed(1)}-year-old ${player.position} in ${player.careerStage.replace("_", " ")}, ${player.ageCurveStatus.replace(
+    "_",
+    " "
+  )}, ${player.reliabilityTier} reliability, ${roleClause}${reasonClause}.`;
 }
 
 function toPlayer(score: PositionAgeTrajectoryScore, generatedAt: string): TiberAgeContextPlayer {
   const reliabilityTier = toReliabilityTier(score);
-  const rankAdjustmentPolicy = determinePolicy(score, reliabilityTier);
-  const modifier = determineModifier(score);
+  const suppressReasons = buildSuppressReasons(score, reliabilityTier);
+  const rankAdjustmentPolicy = determinePolicy(score, reliabilityTier, suppressReasons);
+  const modifier = determineModifier(score, rankAdjustmentPolicy);
+
+  const scoringEligible = rankAdjustmentPolicy === "dynasty_only";
+  const displayOnly = rankAdjustmentPolicy === "display_only";
 
   const player: TiberAgeContextPlayer = {
     playerId: score.playerId,
@@ -106,9 +138,13 @@ function toPlayer(score: PositionAgeTrajectoryScore, generatedAt: string): Tiber
     careerStage: toCareerStage(score.ageBandStage),
     ageCurveStatus: toAgeCurveStatus(score.ageCurveStatus),
     ageCurveDelta: score.ageCurveDelta,
+    peerPercentile: Number.isFinite(score.ageTrajectoryScore) ? score.ageTrajectoryScore : null,
     reliabilityTier,
     hasWarningFlag: score.flags.some((flag) => flag.severity === "warning"),
     warningFlags: score.flags.map((flag) => flag.code),
+    suppressReasons,
+    scoringEligible,
+    displayOnly,
     suppressFromRanking: rankAdjustmentPolicy === "none",
     rankAdjustmentPolicy,
     recommendedModifierBucket: modifier.bucket,
@@ -133,10 +169,16 @@ export function buildTiberAgeContextArtifact(scoresByPosition: AgeTrajectoryScor
   return {
     artifactVersion: TIBER_AGE_CONTEXT_ARTIFACT_VERSION,
     modelVersion: TIBER_AGE_CONTEXT_MODEL_VERSION,
+    calibrationVersion: "none_pr1",
+    modifierStatus: "provisional_non_authoritative",
     generatedAt,
     scope: "age_context_only",
     provenance: {
       module: "Age-curve-intelligence-model",
+      ownership: {
+        owns: ["career stage", "age-curve-relative context", "guardrail metadata"],
+        doesNotOwn: ["projections", "rankings", "standalone valuation"]
+      },
       notes: [
         "Age context only: no projections, rankings, or valuation authority.",
         "rankAdjustmentPolicy is constrained to none/display_only/dynasty_only in PR1.",
