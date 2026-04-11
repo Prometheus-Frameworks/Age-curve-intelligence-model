@@ -44,6 +44,8 @@ Guardrails:
 - `modifierIsProvisional` is always `true` in the canonical export.
 - `full_context` is intentionally not emitted in PR1.
 - player `summary` is deterministic and template-based (no LLM freeform generation).
+- canonical top-level contract includes `artifactVersion`, `modelVersion`, `generatedAt`, `scope`, `provenance`, and `players`.
+- per-player provenance includes run-scoped lineage metadata for downstream traceability.
 
 ## Data source
 
