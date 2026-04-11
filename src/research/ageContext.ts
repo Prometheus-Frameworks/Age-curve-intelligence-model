@@ -16,6 +16,8 @@ import type {
 } from "../types/ageContext.js";
 import { TIBER_AGE_CONTEXT_ARTIFACT_VERSION, TIBER_AGE_CONTEXT_MODEL_VERSION } from "../types/ageContext.js";
 
+type SuppressionTier = "none" | "soft" | "hard";
+
 function toCareerStage(stage: AgeBandStage): CareerStage {
   if (stage === "pre-peak") return "pre_peak";
   if (stage === "peak-window") return "peak_window";
@@ -31,22 +33,34 @@ function toAgeCurveStatus(status: AgeCurveRelativeStatus | null): AgeCurveStatus
   return "unknown";
 }
 
-function toReliabilityTier(score: PositionAgeTrajectoryScore): ReliabilityTier {
-  if (score.componentCount >= 3 && !score.flags.some((flag) => flag.code === "low_peer_sample")) {
-    return "high";
+function deriveReliabilityTier(score: PositionAgeTrajectoryScore): ReliabilityTier {
+  const warningCount = score.flags.filter((flag) => flag.severity === "warning").length;
+  const hasLowPeerSample = score.flags.some((flag) => flag.code === "low_peer_sample");
+  const hasInsufficientComponentData = score.flags.some((flag) => flag.code === "insufficient_component_data");
+  const hasUnknownAgeCurveStatus = score.ageCurveStatus === null;
+  const hasMissingCriticalScoreInput = score.ageTrajectoryScore === null || score.ageCurveDelta === null;
+
+  if (score.componentCount <= 0 || hasInsufficientComponentData || hasUnknownAgeCurveStatus || hasMissingCriticalScoreInput) {
+    return "unknown";
   }
-  if (score.componentCount >= 2) {
-    return "medium";
-  }
-  if (score.componentCount >= 1) {
+
+  if (score.componentCount <= 1 || warningCount >= 2) {
     return "low";
   }
-  return "unknown";
+
+  if (score.componentCount >= 3 && warningCount === 0 && !hasLowPeerSample) {
+    return "high";
+  }
+
+  return "medium";
 }
 
-function buildSuppressReasons(score: PositionAgeTrajectoryScore, reliability: ReliabilityTier): string[] {
+function deriveSuppressReasons(score: PositionAgeTrajectoryScore, reliability: ReliabilityTier): string[] {
   const reasons: string[] = [];
   const warningFlags = score.flags.filter((flag) => flag.severity === "warning");
+  const hasLowPeerSample = score.flags.some((flag) => flag.code === "low_peer_sample");
+  const hasInsufficientComponentData =
+    score.flags.some((flag) => flag.code === "insufficient_component_data") || score.componentCount < 2;
 
   if (reliability === "unknown") {
     reasons.push("unknown_reliability");
@@ -58,25 +72,53 @@ function buildSuppressReasons(score: PositionAgeTrajectoryScore, reliability: Re
     reasons.push("warning_burden");
   }
 
-  if (warningFlags.some((flag) => flag.code === "insufficient_component_data")) {
+  if (hasInsufficientComponentData) {
     reasons.push("insufficient_component_data");
+  }
+
+  if (hasLowPeerSample) {
+    reasons.push("low_peer_sample");
   }
 
   if (score.ageCurveStatus === null) {
     reasons.push("unknown_age_curve_status");
   }
 
+  if (score.ageTrajectoryScore === null || score.ageCurveDelta === null) {
+    reasons.push("critical_input_missing");
+  }
+
   return reasons;
 }
 
-function determinePolicy(score: PositionAgeTrajectoryScore, reliability: ReliabilityTier, suppressReasons: string[]): RankAdjustmentPolicy {
-  const warningCount = score.flags.filter((flag) => flag.severity === "warning").length;
+function deriveSuppressionTier(reliability: ReliabilityTier, suppressReasons: string[]): SuppressionTier {
+  if (
+    reliability === "unknown" ||
+    suppressReasons.includes("unknown_age_curve_status") ||
+    suppressReasons.includes("insufficient_component_data") ||
+    suppressReasons.includes("warning_burden") ||
+    suppressReasons.includes("critical_input_missing")
+  ) {
+    return "hard";
+  }
 
-  if (reliability === "unknown" || warningCount >= 2 || suppressReasons.includes("insufficient_component_data")) {
+  if (reliability === "low" || suppressReasons.includes("low_peer_sample")) {
+    return "soft";
+  }
+
+  return "none";
+}
+
+function deriveRankAdjustmentPolicy(
+  score: PositionAgeTrajectoryScore,
+  reliability: ReliabilityTier,
+  suppressionTier: SuppressionTier
+): RankAdjustmentPolicy {
+  if (suppressionTier === "hard") {
     return "none";
   }
 
-  if (reliability === "low") {
+  if (suppressionTier === "soft" || reliability === "low" || reliability === "unknown" || score.ageCurveStatus === null) {
     return "display_only";
   }
 
@@ -85,6 +127,13 @@ function determinePolicy(score: PositionAgeTrajectoryScore, reliability: Reliabi
   }
 
   return "display_only";
+}
+
+function deriveEligibility(rankAdjustmentPolicy: RankAdjustmentPolicy): { scoringEligible: boolean; displayOnly: boolean } {
+  return {
+    scoringEligible: rankAdjustmentPolicy === "dynasty_only",
+    displayOnly: rankAdjustmentPolicy === "display_only"
+  };
 }
 
 function determineModifier(
@@ -110,7 +159,7 @@ function determineModifier(
   return { bucket: "neutral", magnitude: 0 };
 }
 
-function buildSummary(player: TiberAgeContextPlayer): string {
+function formatAgeContextSummary(player: TiberAgeContextPlayer): string {
   const roleClause = player.displayOnly ? "display-only context" : player.scoringEligible ? "scoring-eligible context" : "suppressed context";
   const reasonClause = player.suppressReasons.length > 0 ? ` due to ${player.suppressReasons.join(", ")}` : "";
 
@@ -121,13 +170,12 @@ function buildSummary(player: TiberAgeContextPlayer): string {
 }
 
 function toPlayer(score: PositionAgeTrajectoryScore, generatedAt: string): TiberAgeContextPlayer {
-  const reliabilityTier = toReliabilityTier(score);
-  const suppressReasons = buildSuppressReasons(score, reliabilityTier);
-  const rankAdjustmentPolicy = determinePolicy(score, reliabilityTier, suppressReasons);
+  const reliabilityTier = deriveReliabilityTier(score);
+  const suppressReasons = deriveSuppressReasons(score, reliabilityTier);
+  const suppressionTier = deriveSuppressionTier(reliabilityTier, suppressReasons);
+  const rankAdjustmentPolicy = deriveRankAdjustmentPolicy(score, reliabilityTier, suppressionTier);
   const modifier = determineModifier(score, rankAdjustmentPolicy);
-
-  const scoringEligible = rankAdjustmentPolicy === "dynasty_only";
-  const displayOnly = rankAdjustmentPolicy === "display_only";
+  const { scoringEligible, displayOnly } = deriveEligibility(rankAdjustmentPolicy);
 
   const player: TiberAgeContextPlayer = {
     playerId: score.playerId,
@@ -159,7 +207,7 @@ function toPlayer(score: PositionAgeTrajectoryScore, generatedAt: string): Tiber
     }
   };
 
-  player.summary = buildSummary(player);
+  player.summary = formatAgeContextSummary(player);
   return player;
 }
 
