@@ -95,3 +95,7 @@ th, td { padding: .45rem; }
   .xl\:grid-cols-4 { grid-template-columns: repeat(4,minmax(0,1fr)); }
   .xl\:grid-cols-\[2fr_1fr\] { grid-template-columns: 2fr 1fr; }
 }
+
+input, select { background: #0f172a; color: #e2e8f0; border: 1px solid #334155; border-radius: .5rem; padding: .45rem .6rem; }
+a { color: #67e8f9; text-decoration: none; }
+a:hover { text-decoration: underline; }
