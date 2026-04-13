@@ -212,8 +212,8 @@ export function Dashboard() {
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <div>
               <p className="text-xs uppercase tracking-wider text-slate-500">Latest run</p>
-              <p className="text-sm">{formatUtc(summary.latestRunMetadata?.generatedAt ?? summary.generatedAt)}</p>
-              <p className="text-xs text-slate-400">{summary.latestRunMetadata?.sourceFileName ?? 'Unknown source file'}</p>
+              <p className="text-sm">{formatUtc(summary.latestRunMetadata?.lastRunTimestamp ?? summary.generatedAt)}</p>
+              <p className="text-xs text-slate-400">{summary.latestRunMetadata?.lastUploadedFileName ?? 'Unknown source file'}</p>
             </div>
             <div>
               <p className="text-xs uppercase tracking-wider text-slate-500">Included rows</p>
@@ -346,7 +346,16 @@ export function Dashboard() {
             <p><strong>Age band stage:</strong> {playerDetail.ageBandStage}</p>
             <p><strong>Modifier bucket:</strong> {playerDetail.recommendedModifierBucket ?? '—'}</p>
             <p><strong>Modifier magnitude:</strong> {scoreText(playerDetail.modifierMagnitude)}</p>
-            <p><strong>Flags:</strong> {playerDetail.flags.length ? playerDetail.flags.join(', ') : 'None'}</p>
+            <div>
+              <strong>Flags:</strong>{' '}
+              {playerDetail.flags.length ? (
+                <span>
+                  {playerDetail.flags.map((flag) => `${flag.label} (${flag.code})`).join(', ')}
+                </span>
+              ) : (
+                'None'
+              )}
+            </div>
             <p><strong>Production reason:</strong> {playerDetail.productionReason}</p>
             <p><strong>Role reason:</strong> {playerDetail.roleReason}</p>
             <p><strong>Efficiency reason:</strong> {playerDetail.efficiencyReason}</p>

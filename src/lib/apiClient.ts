@@ -6,9 +6,17 @@ export interface ResultsSummary {
   positionsCovered: Position[];
   artifacts: string[];
   latestRunMetadata: {
-    sourceFileName: string;
-    uploadedAt: string;
     generatedAt: string;
+    lastUploadedFileName: string;
+    lastRunTimestamp: string;
+    inputRowCount: number;
+    includedRowCount: number;
+    validationRan: boolean;
+    validationSummary: {
+      totalCases: number;
+      passedCases: number;
+      failedCases: number;
+    } | null;
   } | null;
   validation: {
     generatedAt: string;
@@ -49,7 +57,12 @@ export interface PlayerDetail {
   ageCurveStatus: string;
   ageCurveDelta: number | null;
   ageBandStage: string;
-  flags: string[];
+  flags: Array<{
+    code: string;
+    label: string;
+    message: string;
+    severity: 'info' | 'warning';
+  }>;
   productionReason: string;
   roleReason: string;
   efficiencyReason: string;
