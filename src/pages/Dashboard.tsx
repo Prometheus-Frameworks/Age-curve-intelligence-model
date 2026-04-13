@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Card } from '../components/ui/Card';
+import { PlayerDetailCard } from '../components/dashboard/PlayerDetailCard';
+import { PositionBrowserCard } from '../components/dashboard/PositionBrowserCard';
 import {
   getArtifacts,
   getPlayerDetail,
@@ -41,6 +43,7 @@ export function Dashboard() {
   const [sortColumn, setSortColumn] = useState<SortColumn>('ageTrajectoryScore');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [playerDetail, setPlayerDetail] = useState<PlayerDetail | null>(null);
+  const [selectedPlayerKey, setSelectedPlayerKey] = useState<string | null>(null);
   const [playerError, setPlayerError] = useState<string | null>(null);
   const [allPlayers, setAllPlayers] = useState<Array<{ playerId: string; playerName: string; season: number; position: Position }>>([]);
   const [playersError, setPlayersError] = useState<string | null>(null);
@@ -134,6 +137,7 @@ export function Dashboard() {
   const loadPlayer = async (playerId: string, season: number) => {
     try {
       setPlayerError(null);
+      setSelectedPlayerKey(`${playerId}-${season}`);
       const detail = await getPlayerDetail(playerId, season);
       setPlayerDetail(detail);
     } catch (error) {
@@ -252,117 +256,39 @@ export function Dashboard() {
         </div>
       </Card>
 
-      <Card className="space-y-4">
-        <h2 className="text-lg font-bold">Position browser</h2>
-        <div className="flex gap-2" style={{ flexWrap: 'wrap' }}>
-          {POSITIONS.map((position) => (
-            <button
-              key={position}
-              onClick={() => setActivePosition(position)}
-              style={position === activePosition ? { borderColor: '#22d3ee', color: '#fff' } : undefined}
-            >
-              {position}
-            </button>
-          ))}
-        </div>
-        <input
-          className="w-full"
-          placeholder="Filter by name, player ID, or season"
-          value={filterText}
-          onChange={(event) => setFilterText(event.target.value)}
+      <section className="browser-detail-layout">
+        <PositionBrowserCard
+          positions={POSITIONS}
+          activePosition={activePosition}
+          onChangePosition={setActivePosition}
+          filterText={filterText}
+          onChangeFilterText={setFilterText}
+          loadingPosition={loadingPosition}
+          positionError={positionError}
+          filteredRows={filteredRows}
+          selectedPlayerKey={selectedPlayerKey}
+          onSelectPlayer={(playerId, season) => {
+            void loadPlayer(playerId, season);
+          }}
+          sortColumn={sortColumn}
+          sortDirection={sortDirection}
+          onToggleSort={toggleSort}
+          scoreText={scoreText}
         />
-        {loadingPosition ? <p className="text-sm text-slate-400">Loading {activePosition} results…</p> : null}
-        {positionError ? <p className="text-sm text-red-200">{positionError}</p> : null}
-        {!loadingPosition && !positionError && filteredRows.length === 0 ? <p className="text-sm text-slate-400">No rows match this filter.</p> : null}
-        {filteredRows.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-slate-400">
-                  <th><button onClick={() => toggleSort('playerName')}>Player</button></th>
-                  <th><button onClick={() => toggleSort('season')}>Season</button></th>
-                  <th><button onClick={() => toggleSort('age')}>Age</button></th>
-                  <th><button onClick={() => toggleSort('ageTrajectoryScore')}>Trajectory</button></th>
-                  <th>Status</th>
-                  <th>Age band</th>
-                  <th><button onClick={() => toggleSort('recommendedModifierBucket')}>Modifier bucket</button></th>
-                  <th>Reason summary</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredRows.map((row) => (
-                  <tr key={`${row.playerId}-${row.season}`} style={{ cursor: 'pointer' }} onClick={() => loadPlayer(row.playerId, row.season)}>
-                    <td>{row.playerName}</td>
-                    <td>{row.season}</td>
-                    <td>{row.age}</td>
-                    <td>{scoreText(row.ageTrajectoryScore)}</td>
-                    <td>{row.ageCurveStatus}</td>
-                    <td>{row.ageBandStage}</td>
-                    <td>{row.recommendedModifierBucket}</td>
-                    <td>{row.overallReasonSummary}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : null}
-      </Card>
-
-      <Card className="space-y-4">
-        <h2 className="text-lg font-bold">Player detail</h2>
-        {playersError ? <p className="text-sm text-red-200">{playersError}</p> : null}
-        <div>
-          <label className="text-sm text-slate-400">Quick player picker</label>
-          <select
-            className="w-full"
-            onChange={(event) => {
-              const [playerId, seasonText] = event.target.value.split('::');
-              if (playerId && seasonText) {
-                void loadPlayer(playerId, Number(seasonText));
-              }
-            }}
-            value={playerDetail ? `${playerDetail.playerId}::${playerDetail.season}` : ''}
-          >
-            <option value="">Select a player result</option>
-            {allPlayers.map((player) => (
-              <option key={`${player.playerId}-${player.season}`} value={`${player.playerId}::${player.season}`}>
-                {player.playerName} ({player.position}, {player.season})
-              </option>
-            ))}
-          </select>
-        </div>
-        {playerError ? <p className="text-sm text-red-200">{playerError}</p> : null}
-        {!playerDetail ? <p className="text-sm text-slate-400">Select a row in the position browser to load details.</p> : null}
-        {playerDetail ? (
-          <div className="grid gap-4 md:grid-cols-2">
-            <p><strong>Player:</strong> {playerDetail.playerName}</p>
-            <p><strong>Player ID:</strong> {playerDetail.playerId}</p>
-            <p><strong>Season:</strong> {playerDetail.season}</p>
-            <p><strong>Position:</strong> {playerDetail.position}</p>
-            <p><strong>Age:</strong> {playerDetail.age}</p>
-            <p><strong>Age trajectory score:</strong> {scoreText(playerDetail.ageTrajectoryScore)}</p>
-            <p><strong>Age curve status:</strong> {playerDetail.ageCurveStatus}</p>
-            <p><strong>Age curve delta:</strong> {scoreText(playerDetail.ageCurveDelta)}</p>
-            <p><strong>Age band stage:</strong> {playerDetail.ageBandStage}</p>
-            <p><strong>Modifier bucket:</strong> {playerDetail.recommendedModifierBucket ?? '—'}</p>
-            <p><strong>Modifier magnitude:</strong> {scoreText(playerDetail.modifierMagnitude)}</p>
-            <div>
-              <strong>Flags:</strong>{' '}
-              {playerDetail.flags.length ? (
-                <span>
-                  {playerDetail.flags.map((flag) => `${flag.label} (${flag.code})`).join(', ')}
-                </span>
-              ) : (
-                'None'
-              )}
-            </div>
-            <p><strong>Production reason:</strong> {playerDetail.productionReason}</p>
-            <p><strong>Role reason:</strong> {playerDetail.roleReason}</p>
-            <p><strong>Efficiency reason:</strong> {playerDetail.efficiencyReason}</p>
-            <p><strong>Overall reason summary:</strong> {playerDetail.overallReasonSummary}</p>
-          </div>
-        ) : null}
-      </Card>
+        <PlayerDetailCard
+          playersError={playersError}
+          allPlayers={allPlayers}
+          playerError={playerError}
+          playerDetail={playerDetail}
+          onQuickSelect={(value) => {
+            const [playerId, seasonText] = value.split('::');
+            if (playerId && seasonText) {
+              void loadPlayer(playerId, Number(seasonText));
+            }
+          }}
+          scoreText={scoreText}
+        />
+      </section>
     </main>
   );
 }
