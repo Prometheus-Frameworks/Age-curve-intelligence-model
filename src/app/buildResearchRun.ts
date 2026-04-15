@@ -62,7 +62,8 @@ export async function buildResearchRun(inputPath: string, outDir: string, upload
   const trajectoryScores = buildAgeTrajectoryScoresByPosition(validRows, ageCurves, peakWindows);
   const tiberReintegration = buildTiberReintegrationArtifact(trajectoryScores);
   const tiberAgeModifiers = buildTiberAgeModifierArtifact(trajectoryScores);
-  const tiberAgeContext = buildTiberAgeContextArtifact(trajectoryScores);
+  const runId = `run_${Date.now()}`;
+  const tiberAgeContext = buildTiberAgeContextArtifact(trajectoryScores, runId);
 
   await writeJson(outDir, "age_curves_by_position.json", ageCurves);
   await writeJson(outDir, "age_metric_averages_by_position.json", metricAverages);

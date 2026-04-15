@@ -45,7 +45,7 @@ function build(scores: PositionAgeTrajectoryScore[]) {
     TE: []
   };
 
-  const artifact = buildTiberAgeContextArtifact(byPosition);
+  const artifact = buildTiberAgeContextArtifact(byPosition, "run_test");
   return artifact.players[0];
 }
 
@@ -176,8 +176,8 @@ test("summary output is deterministic for identical inputs", () => {
     TE: []
   };
 
-  const first = buildTiberAgeContextArtifact(byPosition).players[0];
-  const second = buildTiberAgeContextArtifact(byPosition).players[0];
+  const first = buildTiberAgeContextArtifact(byPosition, "run_test").players[0];
+  const second = buildTiberAgeContextArtifact(byPosition, "run_test").players[0];
 
   assert.equal(first.summary, second.summary);
 });
