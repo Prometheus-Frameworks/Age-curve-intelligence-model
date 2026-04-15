@@ -3,12 +3,13 @@ import type {
   AgeBandStage,
   AgeCurveRelativeStatus,
   AgeTrajectoryScoresByPosition,
-  ModifierBucket,
+  ModifierBucket as InternalModifierBucket,
   PositionAgeTrajectoryScore
 } from "../types/research.js";
 import type {
   AgeCurveStatus,
   CareerStage,
+  ModifierBucket,
   RankAdjustmentPolicy,
   ReliabilityTier,
   TiberAgeContextArtifact,
@@ -31,6 +32,17 @@ function toAgeCurveStatus(status: AgeCurveRelativeStatus | null): AgeCurveStatus
   if (status === "behind") return "behind";
   if (status === "on") return "on_curve";
   return "unknown";
+}
+
+/**
+ * Maps internal research modifier bucket to the contract-level modifier bucket.
+ * The contract uses more precise names to prevent downstream misinterpretation.
+ */
+function toContractModifierBucket(bucket: InternalModifierBucket): ModifierBucket {
+  if (bucket === "boost") return "small_boost";
+  if (bucket === "caution") return "small_caution";
+  if (bucket === "fade") return "fade";
+  return "no_adjustment";
 }
 
 function deriveReliabilityTier(score: PositionAgeTrajectoryScore): ReliabilityTier {
@@ -139,7 +151,7 @@ function deriveEligibility(rankAdjustmentPolicy: RankAdjustmentPolicy): { scorin
 function determineModifier(
   score: PositionAgeTrajectoryScore,
   rankAdjustmentPolicy: RankAdjustmentPolicy
-): { bucket: ModifierBucket; magnitude: number | null } {
+): { bucket: InternalModifierBucket; magnitude: number | null } {
   if (rankAdjustmentPolicy !== "dynasty_only") {
     return { bucket: "neutral", magnitude: null };
   }
@@ -169,7 +181,7 @@ function formatAgeContextSummary(player: TiberAgeContextPlayer): string {
   )}, ${player.reliabilityTier} reliability, ${roleClause}${reasonClause}.`;
 }
 
-function toPlayer(score: PositionAgeTrajectoryScore, generatedAt: string): TiberAgeContextPlayer {
+function toPlayer(score: PositionAgeTrajectoryScore, runId: string): TiberAgeContextPlayer {
   const reliabilityTier = deriveReliabilityTier(score);
   const suppressReasons = deriveSuppressReasons(score, reliabilityTier);
   const suppressionTier = deriveSuppressionTier(reliabilityTier, suppressReasons);
@@ -189,21 +201,20 @@ function toPlayer(score: PositionAgeTrajectoryScore, generatedAt: string): Tiber
     // PR13 contract integrity: do not present non-percentile scores as percentiles.
     peerPercentile: null,
     reliabilityTier,
-    hasWarningFlag: score.flags.some((flag) => flag.severity === "warning"),
     warningFlags: score.flags.map((flag) => flag.code),
     suppressReasons,
     scoringEligible,
     displayOnly,
-    suppressFromRanking: rankAdjustmentPolicy === "none",
     rankAdjustmentPolicy,
-    recommendedModifierBucket: modifier.bucket,
+    modifierBucket: toContractModifierBucket(modifier.bucket),
     modifierMagnitude: modifier.magnitude,
     modifierIsProvisional: true,
-    modifierNonAuthoritativeReason: "Modifier magnitude is provisional, non-calibrated, and non-authoritative in PR1.",
     summary: "",
     provenance: {
-      sourceArtifact: "age_trajectory_scores_by_position.json",
-      generatedAt
+      baselineSource: "age_trajectory_scores_by_position.json",
+      peerGroupSize: null,
+      runId,
+      sourceArtifactNames: ["age_trajectory_scores_by_position.json"]
     }
   };
 
@@ -211,28 +222,37 @@ function toPlayer(score: PositionAgeTrajectoryScore, generatedAt: string): Tiber
   return player;
 }
 
-export function buildTiberAgeContextArtifact(scoresByPosition: AgeTrajectoryScoresByPosition): TiberAgeContextArtifact {
+export function buildTiberAgeContextArtifact(
+  scoresByPosition: AgeTrajectoryScoresByPosition,
+  runId: string
+): TiberAgeContextArtifact {
   const generatedAt = new Date().toISOString();
-  const players = POSITIONS.flatMap((position) => scoresByPosition[position] ?? []).map((score) => toPlayer(score, generatedAt));
+  const players = POSITIONS.flatMap((position) => scoresByPosition[position] ?? []).map((score) => toPlayer(score, runId));
 
   return {
     artifactVersion: TIBER_AGE_CONTEXT_ARTIFACT_VERSION,
     modelVersion: TIBER_AGE_CONTEXT_MODEL_VERSION,
-    calibrationVersion: "none_pr1",
-    modifierStatus: "provisional_non_authoritative",
     generatedAt,
-    scope: "age_context_only",
-    provenance: {
-      module: "Age-curve-intelligence-model",
-      ownership: {
-        owns: ["career stage", "age-curve-relative context", "guardrail metadata"],
-        doesNotOwn: ["projections", "rankings", "standalone valuation"]
-      },
-      notes: [
-        "Age context only: no projections, rankings, or valuation authority.",
-        "rankAdjustmentPolicy is constrained to none/display_only/dynasty_only in PR1.",
-        "full_context is intentionally excluded in PR1."
+    scope: {
+      module: "tiber_age_context",
+      owns: [
+        "career_stage_classification",
+        "relative_age_curve_status",
+        "warning_flags",
+        "provisional_modifier_context"
+      ],
+      doesNotOwn: [
+        "rankings",
+        "projections",
+        "standalone_player_valuation",
+        "standalone_trade_recommendations"
       ]
+    },
+    provenance: {
+      sourceDataset: "tiber-data-lab-export",
+      runId,
+      calibrationVersion: "uncalibrated-rule-v1",
+      modifierStatus: "provisional"
     },
     players
   };

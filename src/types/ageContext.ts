@@ -22,13 +22,53 @@ export type ReliabilityTier = (typeof RELIABILITY_TIER_VALUES)[number];
 
 /**
  * PR1 guardrail: only conservative downstream policy values are allowed.
+ * full_context must never be emitted in PR1.
  */
 export const RANK_ADJUSTMENT_POLICY_VALUES = ["none", "display_only", "dynasty_only"] as const;
 export type RankAdjustmentPolicy = (typeof RANK_ADJUSTMENT_POLICY_VALUES)[number];
 
-export interface TiberAgeContextProvenance {
-  sourceArtifact: string;
-  generatedAt: string;
+/**
+ * Contract-level modifier bucket enum.
+ * More precise than the internal research ModifierBucket.
+ */
+export const MODIFIER_BUCKET_VALUES = [
+  "no_adjustment",
+  "small_boost",
+  "small_caution",
+  "moderate_caution",
+  "fade",
+  "unknown",
+] as const;
+export type ModifierBucket = (typeof MODIFIER_BUCKET_VALUES)[number];
+
+/**
+ * Scope metadata: what this module owns and does not own.
+ * Downstream consumers must respect these boundaries.
+ */
+export interface TiberAgeContextScope {
+  module: "tiber_age_context";
+  owns: string[];
+  doesNotOwn: string[];
+}
+
+/**
+ * Artifact-level provenance: data lineage for the full run.
+ */
+export interface TiberAgeContextArtifactProvenance {
+  sourceDataset: string;
+  runId: string;
+  calibrationVersion: string;
+  modifierStatus: "provisional";
+}
+
+/**
+ * Player-level provenance: data lineage for a single player record.
+ */
+export interface TiberAgeContextPlayerProvenance {
+  baselineSource: string | null;
+  peerGroupSize: number | null;
+  runId: string;
+  sourceArtifactNames: string[];
 }
 
 export interface TiberAgeContextPlayer {
@@ -38,45 +78,63 @@ export interface TiberAgeContextPlayer {
   position: Position;
   age: number;
 
-  // Age-context semantics (orthogonal fields)
+  /**
+   * Lifecycle phase only.
+   * Answers: where is the player in the expected career arc?
+   * Orthogonal to ageCurveStatus.
+   */
   careerStage: CareerStage;
+
+  /**
+   * Relative-to-expectation status only.
+   * Answers: is the player ahead of / on / behind age-position expectation?
+   * Orthogonal to careerStage.
+   */
   ageCurveStatus: AgeCurveStatus;
+
   ageCurveDelta: number | null;
   peerPercentile: number | null;
 
   reliabilityTier: ReliabilityTier;
-  hasWarningFlag: boolean;
   warningFlags: string[];
   suppressReasons: string[];
   scoringEligible: boolean;
   displayOnly: boolean;
-  suppressFromRanking: boolean;
 
+  /**
+   * Explicit downstream usage guardrail.
+   * PR1 must never emit "full_context".
+   */
   rankAdjustmentPolicy: RankAdjustmentPolicy;
 
-  recommendedModifierBucket: "boost" | "neutral" | "caution" | "fade";
-  modifierMagnitude: number | null;
-  modifierIsProvisional: true;
-  modifierNonAuthoritativeReason: string;
+  /**
+   * Contract-level modifier bucket (more precise than internal research bucket).
+   */
+  modifierBucket: ModifierBucket;
 
+  /**
+   * Provisional only in PR1. Non-authoritative until historical calibration lands.
+   * Must not be treated as a validated ranking delta.
+   */
+  modifierMagnitude: number | null;
+
+  /** Always true in PR1. Literal type enforces this at compile time. */
+  modifierIsProvisional: true;
+
+  /**
+   * Deterministic, template-based explanation only.
+   * Must not be LLM-authored.
+   */
   summary: string;
-  provenance: TiberAgeContextProvenance;
+
+  provenance: TiberAgeContextPlayerProvenance;
 }
 
 export interface TiberAgeContextArtifact {
   artifactVersion: typeof TIBER_AGE_CONTEXT_ARTIFACT_VERSION;
   modelVersion: typeof TIBER_AGE_CONTEXT_MODEL_VERSION;
-  calibrationVersion: string;
-  modifierStatus: "provisional_non_authoritative";
   generatedAt: string;
-  scope: "age_context_only";
-  provenance: {
-    module: "Age-curve-intelligence-model";
-    ownership: {
-      owns: string[];
-      doesNotOwn: string[];
-    };
-    notes: string[];
-  };
+  scope: TiberAgeContextScope;
+  provenance: TiberAgeContextArtifactProvenance;
   players: TiberAgeContextPlayer[];
 }
