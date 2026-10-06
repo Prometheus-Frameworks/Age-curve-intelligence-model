@@ -1,5 +1,7 @@
 # Age-curve-intelligence-model
 
+> **[TIBER Now — what works, what we’re building, and what’s still conceptual](https://github.com/Prometheus-Frameworks/TIBER-Fantasy/blob/main/docs/TIBER_NOW.md)**
+
 This repo is the **TIBER Age Context v1** module: an age-context-only producer with a hostable app layer for upload/run/validation/result browsing.
 
 ## PR-7 scope
